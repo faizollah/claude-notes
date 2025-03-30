@@ -1,0 +1,58 @@
+/* Claude Notes styles */
+
+.claude-notes-highlight {
+  text-decoration: underline;
+  text-decoration-color: #5E72E4;
+  text-decoration-thickness: 1px;
+  position: relative;
+}
+
+.claude-notes-highlight sup {
+  color: #5E72E4;
+  font-weight: bold;
+  vertical-align: baseline;
+}
+
+#claude-notes-modal {
+  font-family: Arial, sans-serif;
+  transition: all 0.3s ease;
+  z-index: 10000 !important;
+}
+
+#claude-notes-modal a {
+  transition: all 0.2s ease;
+}
+
+#claude-notes-modal a:hover {
+  transform: scale(1.05);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+}
+
+#claude-notes-clip-button {
+  transition: all 0.2s ease;
+  animation: pulse 1s ease-in-out;
+  font-weight: bold !important;
+  pointer-events: auto !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: block !important;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+#claude-notes-clip-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+.claude-notes-clip {
+  transition: all 0.2s ease;
+}
+
+.claude-notes-clip:hover {
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+} 

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Claude Notes</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <header>
+      <h1>Claude Notes</h1>
+    </header>
+    <div class="content">
+      <p id="status-message">Select text on Claude.ai and click the "Clip" button to save notes.</p>
+      <div id="clips-container">
+        <!-- Clips will be loaded here dynamically -->
+      </div>
+    </div>
+    <footer>
+      <a href="library.html" target="_blank" id="view-library">View All Notes</a>
+      <button id="toggle-modal">Toggle Notes Panel</button>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html> 
