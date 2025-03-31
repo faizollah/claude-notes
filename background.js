@@ -41,6 +41,11 @@ chrome.action.onClicked.addListener((tab) => {
                 (response) => {
                   if (chrome.runtime.lastError) {
                     console.error('Still could not toggle modal:', chrome.runtime.lastError);
+                    showNotification('Error', 'Could not display notes panel');
+                  } else if (response && !response.success) {
+                    // Handle error response from content script
+                    console.log('Modal toggle failed:', response.error);
+                    showNotification('Claude Notes', response.error || 'Please open a conversation to use Claude Notes');
                   } else {
                     console.log('Modal toggled after injection');
                   }
@@ -49,7 +54,12 @@ chrome.action.onClicked.addListener((tab) => {
             }, 300);
           }).catch(err => {
             console.error('Could not inject content script:', err);
+            showNotification('Error', 'Could not initialize Claude Notes');
           });
+        } else if (response && !response.success) {
+          // Handle error response from content script
+          console.log('Modal toggle failed:', response.error);
+          showNotification('Claude Notes', response.error || 'Please open a conversation to use Claude Notes');
         } else {
           console.log('Modal toggled successfully');
         }
@@ -57,14 +67,19 @@ chrome.action.onClicked.addListener((tab) => {
     );
   } else {
     // Notify user that the extension only works on Claude.ai
-    chrome.notifications.create({
-      type: 'basic',
-      iconUrl: 'icons/icon128.png',
-      title: 'Claude Notes',
-      message: 'This extension only works on Claude.ai'
-    });
+    showNotification('Claude Notes', 'This extension only works on Claude.ai');
   }
 });
+
+// Helper function to show notifications
+function showNotification(title, message) {
+  chrome.notifications.create({
+    type: 'basic',
+    iconUrl: 'icons/icon128.png',
+    title: title,
+    message: message
+  });
+}
 
 // Listen for messages from other parts of the extension
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

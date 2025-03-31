@@ -6,6 +6,7 @@ let currentClipId = 0;
 let currentConversationId = '';
 let conversationTitle = '';
 let needsUpdate = false;
+let lastUrl = ''; // Track URL for SPA navigation detection
 
 // Initialize extension
 function init() {
@@ -13,6 +14,9 @@ function init() {
   if (!window.location.href.includes('claude.ai')) return;
   
   console.log('Claude Notes: Initializing extension...');
+  
+  // Store current URL
+  lastUrl = window.location.href;
   
   // Extract conversation ID from URL
   currentConversationId = extractConversationId();
@@ -28,18 +32,163 @@ function init() {
   // Create modal if it doesn't exist yet
   if (!document.getElementById('claude-notes-modal')) {
     createModal();
-    // Show modal on initial load
-    noteModal.style.display = 'flex';
   }
   
-  // Load saved clips
-  loadClips();
+  // Only proceed with showing UI if there's a valid conversation ID
+  if (currentConversationId !== 'default') {
+    // Load saved clips
+    loadClips();
+    
+    // Add event listeners
+    document.addEventListener('mouseup', handleTextSelection);
+    
+    // Show modal on initial load if we have a valid conversation
+    if (noteModal) {
+      noteModal.style.display = 'flex';
+    }
+    
+    // Set up a content-ready check to ensure Claude has loaded its content
+    waitForClaudeContent();
+  } else {
+    console.log('No conversation ID found in URL, hiding extension UI');
+    // Hide modal if it exists
+    if (noteModal) {
+      noteModal.style.display = 'none';
+    }
+    
+    // Remove selection listener to prevent showing the clip button
+    document.removeEventListener('mouseup', handleTextSelection);
+  }
   
-  // Add event listeners
-  document.addEventListener('mouseup', handleTextSelection);
+  // Add resize listener to keep modal within bounds
+  window.addEventListener('resize', ensureModalWithinBounds);
   
-  // Apply highlights to any existing clips
-  applyHighlights();
+  // Setup URL change monitoring for SPA navigation
+  setupUrlChangeMonitoring();
+}
+
+// Wait for Claude's content to be ready before applying highlights
+function waitForClaudeContent(attempt = 0, maxAttempts = 10) {
+  // Check if Claude has rendered its messages
+  const messageContainers = document.querySelectorAll('.message, .prose, [role="region"], .whitespace-pre-wrap');
+  
+  if (messageContainers.length > 0) {
+    console.log('Claude content detected, applying highlights...');
+    // Apply highlights now that content is available
+    setTimeout(() => {
+      applyHighlights();
+    }, 200);
+  } else if (attempt < maxAttempts) {
+    // Retry with exponential backoff
+    const delay = 300 * Math.pow(1.5, attempt);
+    console.log(`No Claude content detected yet, retry in ${delay}ms (attempt ${attempt + 1}/${maxAttempts})`);
+    setTimeout(() => {
+      waitForClaudeContent(attempt + 1, maxAttempts);
+    }, delay);
+  } else {
+    console.log('Maximum retry attempts reached, could not detect Claude content');
+  }
+}
+
+// Setup monitoring for URL changes in SPA
+function setupUrlChangeMonitoring() {
+  // Check frequently for URL changes (SPA navigation)
+  setInterval(checkUrlChange, 1000);
+  
+  // Also use a MutationObserver as a backup detection method
+  const observer = new MutationObserver((mutations) => {
+    // If URL has changed, the title often changes too
+    if (window.location.href !== lastUrl) {
+      checkUrlChange();
+    }
+  });
+  
+  // Observe title changes which often correlate with navigation
+  observer.observe(document.querySelector('title'), { 
+    subtree: true, 
+    characterData: true, 
+    childList: true 
+  });
+}
+
+// Check if URL has changed and handle conversation changes
+function checkUrlChange() {
+  const currentUrl = window.location.href;
+  
+  // If URL hasn't changed, do nothing
+  if (currentUrl === lastUrl) return;
+  
+  console.log('URL changed:', lastUrl, '->', currentUrl);
+  lastUrl = currentUrl;
+  
+  // Get new conversation ID
+  const newConversationId = extractConversationId();
+  
+  // If we can't extract a conversation ID, retry after a short delay
+  // This handles cases where the URL changes but the DOM hasn't fully updated
+  if (newConversationId === 'default' && currentUrl.includes('claude.ai/chat/')) {
+    console.log('URL indicates a conversation but couldn\'t extract ID, will retry');
+    setTimeout(checkUrlChange, 500);
+    return;
+  }
+  
+  // Handle case where we've navigated away from a conversation to a page without a conversation ID
+  if (newConversationId === 'default') {
+    console.log('Navigated to a page without a conversation ID, hiding extension UI');
+    currentConversationId = newConversationId;
+    
+    // Hide modal if it exists
+    if (noteModal && noteModal.style.display !== 'none') {
+      noteModal.style.display = 'none';
+    }
+    
+    // Remove selection listener to prevent showing the clip button
+    document.removeEventListener('mouseup', handleTextSelection);
+    
+    // Clear highlights from previous page
+    clearAllHighlights();
+    
+    return;
+  }
+  
+  // If conversation ID has changed, update everything
+  if (newConversationId !== currentConversationId) {
+    console.log('Conversation changed:', currentConversationId, '->', newConversationId);
+    currentConversationId = newConversationId;
+    
+    // Update conversation title (with retry for SPA transitions)
+    const updateTitle = () => {
+      conversationTitle = document.title.replace(' - Claude', '').trim();
+      
+      // If title seems incomplete, retry after a short delay
+      // This handles SPA transitions where title updates might lag
+      if (conversationTitle === 'Claude' || conversationTitle === '') {
+        console.log('Title not yet updated, will retry');
+        setTimeout(updateTitle, 300);
+        return;
+      }
+      
+      console.log('New conversation title:', conversationTitle);
+      
+      // Add selection listener if it was removed
+      document.removeEventListener('mouseup', handleTextSelection); // Remove first to prevent duplicates
+      document.addEventListener('mouseup', handleTextSelection);
+      
+      // Reload clips for the new conversation
+      loadClips();
+      
+      // Update modal content if it's visible
+      if (noteModal && noteModal.style.display !== 'none') {
+        updateModalContent();
+      }
+      
+      // Clear old highlights - don't apply new ones yet, loadClips will handle that
+      clearAllHighlights();
+    };
+    
+    // Start the title update process
+    updateTitle();
+  }
 }
 
 // Extract conversation ID from URL
@@ -66,8 +215,8 @@ function createModal() {
   noteModal = document.createElement('div');
   noteModal.id = 'claude-notes-modal';
   noteModal.style.position = 'fixed';
-  noteModal.style.top = '100px';
-  noteModal.style.right = '100px';
+  noteModal.style.top = '50px';
+  noteModal.style.right = '50px';
   noteModal.style.width = '300px';
   noteModal.style.minHeight = '100px';
   noteModal.style.maxHeight = '500px';
@@ -128,7 +277,7 @@ function createModal() {
   const viewAllLink = document.createElement('a');
   viewAllLink.textContent = 'View All Notes';
   viewAllLink.href = '#';
-  viewAllLink.style.backgroundColor = '#5E72E4';
+  viewAllLink.style.backgroundColor = '#c96442';
   viewAllLink.style.color = 'white';
   viewAllLink.style.padding = '8px 12px';
   viewAllLink.style.borderRadius = '4px';
@@ -168,6 +317,7 @@ function createModal() {
 // Make an element draggable
 function makeDraggable(element, handle) {
   let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+  const minDistanceFromEdge = 50; // Minimum distance from window edges
   
   handle.onmousedown = dragMouseDown;
   
@@ -190,13 +340,42 @@ function makeDraggable(element, handle) {
     pos2 = pos4 - e.clientY;
     pos3 = e.clientX;
     pos4 = e.clientY;
-    // Set the element's new position
-    element.style.top = (element.offsetTop - pos2) + "px";
-    element.style.left = (element.offsetLeft - pos1) + "px";
-    // If moving from default position, set right to auto
-    if (element.style.right) {
-      element.style.right = 'auto';
+    
+    // Calculate new position
+    const newTop = element.offsetTop - pos2;
+    const newLeft = element.offsetLeft - pos1;
+    
+    // Get window dimensions
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    
+    // Apply constraints - ensure element stays within bounds
+    // Top constraint
+    if (newTop < minDistanceFromEdge) {
+      element.style.top = `${minDistanceFromEdge}px`;
+    } 
+    // Bottom constraint
+    else if (newTop + element.offsetHeight > windowHeight - minDistanceFromEdge) {
+      element.style.top = `${windowHeight - element.offsetHeight - minDistanceFromEdge}px`;
+    } 
+    else {
+      element.style.top = `${newTop}px`;
     }
+    
+    // Left constraint
+    if (newLeft < minDistanceFromEdge) {
+      element.style.left = `${minDistanceFromEdge}px`;
+    } 
+    // Right constraint
+    else if (newLeft + element.offsetWidth > windowWidth - minDistanceFromEdge) {
+      element.style.left = `${windowWidth - element.offsetWidth - minDistanceFromEdge}px`;
+    } 
+    else {
+      element.style.left = `${newLeft}px`;
+    }
+    
+    // If moving from default position, set right to auto
+    element.style.right = 'auto';
   }
   
   function closeDragElement() {
@@ -329,7 +508,7 @@ function createClipButton(selection) {
   clipButton.style.top = `${rect.top + window.scrollY - 30}px`;
   clipButton.style.zIndex = '10001';
   clipButton.style.padding = '5px 10px';
-  clipButton.style.backgroundColor = '#5E72E4';
+  clipButton.style.backgroundColor = '#c96442';
   clipButton.style.color = 'white';
   clipButton.style.border = 'none';
   clipButton.style.borderRadius = '4px';
@@ -459,110 +638,116 @@ function highlightText(range, clipId) {
     
     // Simple case: selection is within a single text node
     if (startContainer === endContainer && startContainer.nodeType === Node.TEXT_NODE) {
-      // Use surroundContents for simple text node selections
+      try {
+        // Use surroundContents for simple text node selections
+        const highlightSpan = document.createElement('span');
+        highlightSpan.className = 'claude-notes-highlight';
+        highlightSpan.dataset.clipId = clipId;
+        highlightSpan.style.textDecoration = 'underline';
+        highlightSpan.style.textDecorationColor = '#c96442';
+        highlightSpan.style.textDecorationThickness = '1px';
+        highlightSpan.style.position = 'relative';
+        
+        const superscript = document.createElement('sup');
+        superscript.textContent = clipId + 1; // Display 1-based indexing
+        superscript.style.color = '#c96442';
+        superscript.style.verticalAlign = 'baseline';
+        
+        // Clone the range to avoid modifying the original
+        const clonedRange = range.cloneRange();
+        clonedRange.surroundContents(highlightSpan);
+        highlightSpan.prepend(superscript);
+        return true;
+      } catch (nodeError) {
+        console.error('Error in simple highlight case:', nodeError);
+        // Fall through to complex case if this fails
+      }
+    }
+    
+    // Complex case: selection spans multiple nodes or elements
+    try {
+      // Use a DocumentFragment for complex selections
+      const fragment = range.extractContents();
+      
+      // Create highlight span
       const highlightSpan = document.createElement('span');
       highlightSpan.className = 'claude-notes-highlight';
       highlightSpan.dataset.clipId = clipId;
       highlightSpan.style.textDecoration = 'underline';
-      highlightSpan.style.textDecorationColor = '#5E72E4';
+      highlightSpan.style.textDecorationColor = '#c96442';
       highlightSpan.style.textDecorationThickness = '1px';
       highlightSpan.style.position = 'relative';
       
+      // Create superscript number
       const superscript = document.createElement('sup');
       superscript.textContent = clipId + 1; // Display 1-based indexing
-      superscript.style.color = '#5E72E4';
+      superscript.style.color = '#c96442';
+      superscript.style.fontWeight = 'bold';
       superscript.style.verticalAlign = 'baseline';
       
-      range.surroundContents(highlightSpan);
-      highlightSpan.prepend(superscript);
-      return;
+      // Add the superscript to the beginning of the span
+      highlightSpan.appendChild(superscript);
+      
+      // Add the extracted contents to the highlight span
+      highlightSpan.appendChild(fragment);
+      
+      // Insert the highlight span at the start of the range
+      range.insertNode(highlightSpan);
+      return true;
+    } catch (complexError) {
+      console.error('Error in complex highlight case:', complexError);
+      // Fall through to fallback method
     }
     
-    // Complex case: selection spans multiple nodes or elements
-    // Use a DocumentFragment to handle complex selections
-    const fragment = range.extractContents();
+  } catch (e) {
+    console.error('Claude Notes: Error highlighting text', e);
+  }
+  
+  // Fallback method - try to at least apply a basic highlight to part of the selection
+  try {
+    // Create a new range for just a portion of the selection if possible
+    const newRange = document.createRange();
+    newRange.setStart(range.startContainer, range.startOffset);
+    newRange.setEnd(range.startContainer, 
+                   Math.min(range.startContainer.length || 0, 
+                            range.startOffset + 5));
     
-    // Create highlight span
     const highlightSpan = document.createElement('span');
     highlightSpan.className = 'claude-notes-highlight';
     highlightSpan.dataset.clipId = clipId;
     highlightSpan.style.textDecoration = 'underline';
-    highlightSpan.style.textDecorationColor = '#5E72E4';
+    highlightSpan.style.textDecorationColor = '#c96442';
     highlightSpan.style.textDecorationThickness = '1px';
-    highlightSpan.style.position = 'relative';
     
-    // Create superscript number
+    // Create the superscript number
     const superscript = document.createElement('sup');
     superscript.textContent = clipId + 1; // Display 1-based indexing
-    superscript.style.color = '#5E72E4';
+    superscript.style.color = '#c96442';
     superscript.style.fontWeight = 'bold';
     superscript.style.verticalAlign = 'baseline';
     
-    // Add the superscript to the beginning of the span
-    highlightSpan.appendChild(superscript);
-    
-    // Add the extracted contents to the highlight span
-    highlightSpan.appendChild(fragment);
-    
-    // Insert the highlight span at the start of the range
-    range.insertNode(highlightSpan);
-    
-  } catch (e) {
-    console.error('Claude Notes: Error highlighting text', e);
-    // Fallback method - try to at least apply a basic highlight to part of the selection
-    try {
-      // Create a new range for just a portion of the selection if possible
-      const newRange = document.createRange();
-      newRange.setStart(range.startContainer, range.startOffset);
-      newRange.setEnd(range.startContainer, 
-                     Math.min(range.startContainer.length || 0, 
-                             range.startOffset + 5));
-      
-      const highlightSpan = document.createElement('span');
-      highlightSpan.className = 'claude-notes-highlight';
-      highlightSpan.dataset.clipId = clipId;
-      highlightSpan.style.textDecoration = 'underline';
-      highlightSpan.style.textDecorationColor = '#5E72E4';
-      highlightSpan.style.textDecorationThickness = '1px';
-      
-      // Create the superscript number
-      const superscript = document.createElement('sup');
-      superscript.textContent = clipId + 1; // Display 1-based indexing
-      superscript.style.color = '#5E72E4';
-      superscript.style.fontWeight = 'bold';
-      superscript.style.verticalAlign = 'baseline';
-      
-      // If this fails, we'll just skip the highlighting
-      newRange.surroundContents(highlightSpan);
-      highlightSpan.prepend(superscript);
-    } catch (fallbackError) {
-      console.error('Claude Notes: Fallback highlighting also failed', fallbackError);
-    }
+    // If this fails, we'll just skip the highlighting
+    newRange.surroundContents(highlightSpan);
+    highlightSpan.prepend(superscript);
+    return true;
+  } catch (fallbackError) {
+    console.error('Claude Notes: Fallback highlighting also failed', fallbackError);
+    return false;
   }
 }
 
 // Apply highlights for all saved clips
-function applyHighlights() {
+function applyHighlights(retryCount = 0, maxRetries = 5) {
   console.log('Applying highlights for conversation:', currentConversationId);
   console.log('Number of clips to highlight:', clips.length);
+  
+  // Always clear all existing highlights first
+  clearAllHighlights();
   
   if (!clips || clips.length === 0) {
     console.log('No clips to highlight');
     return;
   }
-  
-  // Clear any existing highlights first to avoid duplicates
-  document.querySelectorAll('.claude-notes-highlight').forEach(highlight => {
-    try {
-      const parent = highlight.parentNode;
-      while (highlight.firstChild) {
-        parent.insertBefore(highlight.firstChild, highlight);
-      }
-      parent.removeChild(highlight);
-    } catch (e) {
-      console.error('Error clearing existing highlight', e);
-    }
-  });
   
   // Find all possible message containers
   const potentialContainers = [];
@@ -586,6 +771,18 @@ function applyHighlights() {
   
   console.log('Found potential containers:', potentialContainers.length);
   
+  // If no containers found and we haven't exceeded max retries, try again after a delay
+  // This helps wait for Claude's content to fully load before applying highlights
+  if (potentialContainers.length === 0 && retryCount < maxRetries) {
+    console.log(`No message containers found yet, retrying in ${500 * (retryCount + 1)}ms (attempt ${retryCount + 1}/${maxRetries})`);
+    setTimeout(() => {
+      applyHighlights(retryCount + 1, maxRetries);
+    }, 500 * (retryCount + 1)); // Exponential backoff
+    return;
+  }
+  
+  let highlightedCount = 0;
+  
   // Try to highlight each clip
   clips.forEach(clip => {
     if (!clip.range) {
@@ -604,6 +801,7 @@ function applyHighlights() {
           console.log('Found exact container match for clip:', clip.id);
           highlightTextInContainer(container, clip);
           found = true;
+          highlightedCount++;
           break;
         }
       } catch (e) {
@@ -625,6 +823,7 @@ function applyHighlights() {
             if (range) {
               highlightText(range, clip.id);
               found = true;
+              highlightedCount++;
               break;
             }
           }
@@ -638,6 +837,62 @@ function applyHighlights() {
       console.log('Could not find a match for clip:', clip.id);
     }
   });
+  
+  console.log(`Successfully highlighted ${highlightedCount} out of ${clips.length} clips`);
+  
+  // If no clips were highlighted but we have clips and haven't exceeded retries, try again
+  if (highlightedCount === 0 && clips.length > 0 && retryCount < maxRetries) {
+    console.log(`No clips were highlighted, retrying in ${1000 * (retryCount + 1)}ms (attempt ${retryCount + 1}/${maxRetries})`);
+    setTimeout(() => {
+      applyHighlights(retryCount + 1, maxRetries);
+    }, 1000 * (retryCount + 1)); // Longer delay for subsequent attempts
+  }
+}
+
+// Clear all existing highlights from the page
+function clearAllHighlights() {
+  console.log('Clearing all existing highlights');
+  
+  try {
+    const highlights = document.querySelectorAll('.claude-notes-highlight');
+    
+    if (highlights.length === 0) {
+      console.log('No highlights found to clear');
+      return;
+    }
+    
+    console.log(`Clearing ${highlights.length} highlights`);
+    
+    highlights.forEach(highlight => {
+      try {
+        const parent = highlight.parentNode;
+        if (!parent) {
+          console.log('Highlight has no parent, skipping');
+          return;
+        }
+        
+        // Move all children out before removing the highlight element
+        // This preserves the original text
+        while (highlight.firstChild) {
+          if (highlight.firstChild.nodeType === Node.ELEMENT_NODE && 
+              highlight.firstChild.tagName === 'SUP') {
+            // Remove superscript nodes
+            highlight.removeChild(highlight.firstChild);
+          } else {
+            // Move text nodes and other elements back to parent
+            parent.insertBefore(highlight.firstChild, highlight);
+          }
+        }
+        
+        // Remove the empty highlight span
+        parent.removeChild(highlight);
+      } catch (e) {
+        console.error('Error clearing specific highlight', e);
+      }
+    });
+  } catch (e) {
+    console.error('Error in clearAllHighlights:', e);
+  }
 }
 
 // Highlight text in a container using text node offsets
@@ -680,75 +935,103 @@ function highlightTextInContainer(container, clip) {
 // Find text in a container and create a range for it
 function findTextInContainer(container, searchText) {
   try {
-    const textNodes = getTextNodes(container);
-    const searchTextLower = searchText.toLowerCase();
-    
-    // First try exact match
-    for (const node of textNodes) {
-      if (node.textContent.includes(searchText)) {
-        const startPos = node.textContent.indexOf(searchText);
-        const range = document.createRange();
-        range.setStart(node, startPos);
-        range.setEnd(node, startPos + searchText.length);
-        return range;
-      }
-    }
-    
-    // Try case-insensitive match
-    for (const node of textNodes) {
-      const lowerContent = node.textContent.toLowerCase();
-      if (lowerContent.includes(searchTextLower)) {
-        const startPos = lowerContent.indexOf(searchTextLower);
-        const range = document.createRange();
-        range.setStart(node, startPos);
-        range.setEnd(node, startPos + searchText.length);
-        return range;
-      }
-    }
-    
-    // Try checking across multiple text nodes
-    if (textNodes.length > 1) {
-      // Build a concatenated string of text content with node indices
-      let fullText = '';
-      const nodeIndices = [];
+    // First try exact match within the text content
+    if (container.textContent.includes(searchText)) {
+      const textNodes = getTextNodes(container);
+      const searchTextLower = searchText.toLowerCase();
       
-      for (let i = 0; i < textNodes.length; i++) {
-        const nodeText = textNodes[i].textContent;
-        nodeIndices.push({
-          node: i,
-          start: fullText.length,
-          end: fullText.length + nodeText.length
-        });
-        fullText += nodeText;
-      }
-      
-      // Find the search text in the full text
-      const pos = fullText.indexOf(searchText);
-      if (pos >= 0) {
-        // Find which nodes this spans
-        const startNodeInfo = nodeIndices.find(info => 
-          pos >= info.start && pos < info.end);
-        
-        const endPos = pos + searchText.length;
-        const endNodeInfo = nodeIndices.find(info => 
-          endPos > info.start && endPos <= info.end);
-        
-        if (startNodeInfo && endNodeInfo) {
+      // Try exact match in individual text nodes
+      for (const node of textNodes) {
+        if (node.textContent.includes(searchText)) {
+          const startPos = node.textContent.indexOf(searchText);
           const range = document.createRange();
-          
-          // Set start position
-          const startNode = textNodes[startNodeInfo.node];
-          const startOffset = pos - startNodeInfo.start;
-          range.setStart(startNode, startOffset);
-          
-          // Set end position
-          const endNode = textNodes[endNodeInfo.node];
-          const endOffset = endPos - endNodeInfo.start;
-          range.setEnd(endNode, endOffset);
-          
+          range.setStart(node, startPos);
+          range.setEnd(node, startPos + searchText.length);
           return range;
         }
       }
+      
+      // Try case-insensitive match in individual nodes
+      for (const node of textNodes) {
+        const lowerContent = node.textContent.toLowerCase();
+        if (lowerContent.includes(searchTextLower)) {
+          const startPos = lowerContent.indexOf(searchTextLower);
+          const range = document.createRange();
+          range.setStart(node, startPos);
+          range.setEnd(node, startPos + searchText.length);
+          return range;
+        }
+      }
+      
+      // Try checking across multiple text nodes
+      if (textNodes.length > 1) {
+        // Build a concatenated string of text content with node indices
+        let fullText = '';
+        const nodeIndices = [];
+        
+        for (let i = 0; i < textNodes.length; i++) {
+          const nodeText = textNodes[i].textContent;
+          nodeIndices.push({
+            node: i,
+            start: fullText.length,
+            end: fullText.length + nodeText.length
+          });
+          fullText += nodeText;
+        }
+        
+        // Try exact match first
+        let pos = fullText.indexOf(searchText);
+        if (pos < 0) {
+          // Fall back to case-insensitive match
+          pos = fullText.toLowerCase().indexOf(searchTextLower);
+        }
+        
+        if (pos >= 0) {
+          // Find which nodes this spans
+          const startNodeInfo = nodeIndices.find(info => 
+            pos >= info.start && pos < info.end);
+          
+          const endPos = pos + searchText.length;
+          const endNodeInfo = nodeIndices.find(info => 
+            endPos > info.start && endPos <= info.end);
+          
+          if (startNodeInfo && endNodeInfo) {
+            const range = document.createRange();
+            
+            // Set start position
+            const startNode = textNodes[startNodeInfo.node];
+            const startOffset = pos - startNodeInfo.start;
+            range.setStart(startNode, startOffset);
+            
+            // Set end position
+            const endNode = textNodes[endNodeInfo.node];
+            const endOffset = endPos - endNodeInfo.start;
+            range.setEnd(endNode, endOffset);
+            
+            return range;
+          }
+        }
+      }
+      
+      // If we couldn't create a precise range but we know the text is in there,
+      // create a range for the first portion of the container as a fallback
+      if (textNodes.length > 0) {
+        console.log('Creating fallback range for text that we know exists in container');
+        const firstNode = textNodes[0];
+        const range = document.createRange();
+        range.setStart(firstNode, 0);
+        range.setEnd(firstNode, Math.min(firstNode.length || 0, searchText.length));
+        return range;
+      }
+    }
+    
+    // Final fallback - if we know the text should be in this container but couldn't find it normally
+    // Look for smaller chunks of the text
+    if (searchText.length > 20) {
+      // Try to find a significant chunk of the search text
+      const chunk = searchText.slice(0, Math.min(20, searchText.length / 2));
+      console.log('Trying to find a chunk of the text:', chunk);
+      return findTextInContainer(container, chunk);
     }
     
     return null;
@@ -810,7 +1093,7 @@ function updateModalContent() {
     clipNumber.style.position = 'absolute';
     clipNumber.style.top = '5px';
     clipNumber.style.right = '5px';
-    clipNumber.style.backgroundColor = '#5E72E4';
+    clipNumber.style.backgroundColor = '#c96442';
     clipNumber.style.color = 'white';
     clipNumber.style.width = '20px';
     clipNumber.style.height = '20px';
@@ -1011,7 +1294,17 @@ function loadClips() {
       };
     }
     
+    // Update modal content
     updateModalContent();
+    
+    // Apply highlights with a slight delay to ensure page has loaded
+    if (clips.length > 0) {
+      console.log('Scheduling highlight application after content loads...');
+      // Use a slight delay to let Claude finish rendering its content
+      setTimeout(() => {
+        applyHighlights();
+      }, 1000);
+    }
   });
 }
 
@@ -1020,10 +1313,44 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Content script received message:', message);
   
   if (message.action === 'toggleModal') {
+    // Get current conversation ID
+    const currentConvId = extractConversationId();
+    
+    // Check if we're on a page with a valid conversation ID
+    if (currentConvId === 'default') {
+      console.log('No valid conversation ID found, cannot show modal');
+      sendResponse({ success: false, error: 'No conversation found on this page' });
+      return true;
+    }
+    
     // Initialize if needed
     if (!noteModal) {
       console.log('Modal not initialized yet, creating it now');
       init();
+    } else {
+      // Check if we need to refresh data due to conversation change
+      if (currentConvId !== currentConversationId) {
+        console.log('Conversation changed since last modal interaction, updating...');
+        // Update conversation info
+        currentConversationId = currentConvId;
+        lastUrl = window.location.href;
+        conversationTitle = document.title.replace(' - Claude', '').trim();
+        
+        // Clear old highlights
+        clearAllHighlights();
+        
+        // Load new clips and update modal
+        loadClips();
+        
+        // This will trigger after loadClips completes
+        setTimeout(() => {
+          // Apply new highlights
+          applyHighlights();
+        }, 100);
+      } else {
+        // Same conversation, but make sure modal content is up to date
+        updateModalContent();
+      }
     }
     
     // Toggle modal visibility
@@ -1031,6 +1358,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (noteModal.style.display === 'none') {
         console.log('Showing modal');
         noteModal.style.display = 'flex';
+        
+        // Force update the content when showing
+        updateModalContent();
+        
+        // Make sure modal stays within bounds
+        ensureModalWithinBounds();
+        
+        // Check if highlights need to be reapplied
+        // Count existing highlights to see if they match our clips
+        const existingHighlights = document.querySelectorAll('.claude-notes-highlight').length;
+        if (existingHighlights < clips.length) {
+          console.log(`Highlight mismatch detected: ${existingHighlights} highlights vs ${clips.length} clips`);
+          console.log('Reapplying highlights...');
+          // Apply highlights with a delay to ensure content is loaded
+          setTimeout(() => {
+            applyHighlights();
+          }, 300);
+        }
       } else {
         console.log('Hiding modal');
         noteModal.style.display = 'none';
@@ -1042,4 +1387,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     return true; // Keep the message channel open for async response
   }
-}); 
+});
+
+// Ensure modal stays within bounds when window resizes
+function ensureModalWithinBounds() {
+  if (!noteModal) return;
+  
+  const minDistanceFromEdge = 50;
+  const windowWidth = window.innerWidth;
+  const windowHeight = window.innerHeight;
+  
+  // Get current position
+  const currentTop = parseInt(noteModal.style.top) || 0;
+  const currentLeft = parseInt(noteModal.style.left) || 0;
+  
+  // Check if modal is too close to any edge
+  // Top constraint
+  if (currentTop < minDistanceFromEdge) {
+    noteModal.style.top = `${minDistanceFromEdge}px`;
+  } 
+  // Bottom constraint
+  else if (currentTop + noteModal.offsetHeight > windowHeight - minDistanceFromEdge) {
+    noteModal.style.top = `${windowHeight - noteModal.offsetHeight - minDistanceFromEdge}px`;
+  }
+  
+  // Left constraint
+  if (currentLeft < minDistanceFromEdge) {
+    noteModal.style.left = `${minDistanceFromEdge}px`;
+  } 
+  // Right constraint
+  else if (currentLeft + noteModal.offsetWidth > windowWidth - minDistanceFromEdge) {
+    noteModal.style.left = `${windowWidth - noteModal.offsetWidth - minDistanceFromEdge}px`;
+    noteModal.style.right = 'auto';
+  }
+} 

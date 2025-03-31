@@ -1,14 +1,15 @@
 /* Claude Notes styles */
 
 .claude-notes-highlight {
-  text-decoration: underline;
-  text-decoration-color: #5E72E4;
-  text-decoration-thickness: 1px;
   position: relative;
+  display: inline;
+  text-decoration: underline;
+  text-decoration-color: #c96442;
+  text-decoration-thickness: 2px;
 }
 
 .claude-notes-highlight sup {
-  color: #5E72E4;
+  color: #c96442;
   font-weight: bold;
   vertical-align: baseline;
 }
