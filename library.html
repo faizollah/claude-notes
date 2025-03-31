@@ -5,35 +5,23 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="library.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="container">
     <header>
       <h1>Claude Notes Library</h1>
-      <div class="actions">
-        <button id="export-notes">Export Notes</button>
-        <button id="clear-all" class="danger">Clear All Notes</button>
-      </div>
+      <p class="refresh-note">Please refresh the page if new notes are not visible</p>
     </header>
-    
+
     <div class="search-container">
-      <input type="text" id="search-input" placeholder="Search across all your conversations...">
+      <input type="text" id="search" placeholder="Search notes...">
     </div>
-    
-    <div class="clips-container" id="clips-container">
-      <!-- Notes organized by conversation will be loaded here -->
-      <div class="loading">Loading your notes...</div>
+
+    <div id="clips-container">
+      <div class="loading">Loading notes...</div>
     </div>
-    
-    <div class="empty-state" id="empty-state" style="display: none;">
-      <p>No notes found. Select text in Claude.ai and click "Clip" to save notes.</p>
-    </div>
-    
-    <footer>
-      <p>Claude Notes - Save and organize your AI conversations</p>
-    </footer>
   </div>
-  
   <script src="library.js"></script>
 </body>
 </html> 

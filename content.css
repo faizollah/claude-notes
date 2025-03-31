@@ -1,17 +1,42 @@
 /* Claude Notes styles */
 
-.claude-notes-highlight {
+/* Only apply highlight styles to content outside the modal */
+:not(#claude-notes-modal) .claude-notes-highlight {
   position: relative;
   display: inline;
   text-decoration: underline;
   text-decoration-color: #c96442;
-  text-decoration-thickness: 2px;
+  text-decoration-thickness: 1px;
 }
 
-.claude-notes-highlight sup {
+:not(#claude-notes-modal) .claude-notes-highlight sup {
   color: #c96442;
   font-weight: bold;
   vertical-align: baseline;
+}
+
+/* Code highlight styles */
+.claude-notes-highlight.code {
+  display: inline-block;
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  white-space: nowrap;
+  overflow-x: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-decoration: none !important;
+}
+
+.claude-notes-highlight.code sup {
+  background-color: #c96442;
+  color: white;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-right: 4px;
+  font-size: 10px;
 }
 
 #claude-notes-modal {

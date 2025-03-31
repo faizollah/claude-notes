@@ -443,7 +443,7 @@ function findMessageContainer(node) {
     // Move up to parent node
     node = node.parentNode;
   }
-  
+
   // If we can't find a container but we're definitely in the message area,
   // try to find a generic container that's large enough to be a message
   if (window.location.href.includes('claude.ai/chat')) {
@@ -471,26 +471,45 @@ function handleTextSelection(e) {
   
   console.log('Text selected:', selection.toString().trim());
   
+  // Check if selection is within a code block
+  let isCodeBlock = false;
+  let node = selection.anchorNode;
+  while (node && node !== document.body) {
+    if (node.classList && 
+        node.classList.contains('prismjs') && 
+        node.classList.contains('code-block__code')) {
+      isCodeBlock = true;
+      console.log('Selection is within a code block');
+      break;
+    }
+    node = node.parentNode;
+  }
+  
   // Check if selection is within a Claude message
   const range = selection.getRangeAt(0);
   const container = findMessageContainer(range.commonAncestorContainer);
   
-  if (container) {
-    console.log('Found message container:', container);
+  if (container || isCodeBlock) {
+    if (isCodeBlock) {
+      console.log('Found code block selection');
+    } else {
+      console.log('Found message container:', container);
+    }
+    
     // Create clip button near selection if it doesn't exist
     if (!document.getElementById('claude-notes-clip-button')) {
-      createClipButton(selection);
+      createClipButton(selection, isCodeBlock);
     } else {
       // Update position of existing button
       updateClipButtonPosition(selection);
     }
   } else {
-    console.log('No message container found for selection');
+    console.log('No message container or code block found for selection');
   }
 }
 
 // Create a clip button near the selected text
-function createClipButton(selection) {
+function createClipButton(selection, isCodeBlock) {
   // Remove any existing button first
   const existingButton = document.getElementById('claude-notes-clip-button');
   if (existingButton) {
@@ -502,7 +521,7 @@ function createClipButton(selection) {
   
   const clipButton = document.createElement('button');
   clipButton.id = 'claude-notes-clip-button';
-  clipButton.textContent = 'Clip';
+  clipButton.textContent = isCodeBlock ? 'Clip Code' : 'Clip';
   clipButton.style.position = 'absolute';
   clipButton.style.left = `${rect.right + window.scrollX}px`;
   clipButton.style.top = `${rect.top + window.scrollY - 30}px`;
@@ -518,7 +537,7 @@ function createClipButton(selection) {
   clipButton.style.boxShadow = '0 2px 5px rgba(0, 0, 0, 0.2)';
   
   clipButton.addEventListener('click', () => {
-    saveClip(selection);
+    saveClip(selection, isCodeBlock);
     // Don't remove the button immediately to provide visual feedback
     clipButton.textContent = 'Saved!';
     clipButton.style.backgroundColor = '#4CAF50';
@@ -562,9 +581,11 @@ function updateClipButtonPosition(selection) {
 }
 
 // Save the selected text as a clip
-function saveClip(selection) {
+function saveClip(selection, isCodeBlock) {
   const selectedText = selection.toString().trim();
   if (!selectedText) return;
+  
+  console.log('Saving clip, isCodeBlock:', isCodeBlock);
   
   // Create a new clip object
   const clip = {
@@ -572,7 +593,8 @@ function saveClip(selection) {
     text: selectedText,
     timestamp: new Date().toISOString(),
     range: getRangeInfo(selection.getRangeAt(0)),
-    url: window.location.href
+    url: window.location.href,
+    isCode: isCodeBlock // Add flag for code clips
   };
   
   // Add to clips array for current conversation
@@ -588,7 +610,7 @@ function saveClip(selection) {
   });
   
   // Highlight the selected text
-  highlightText(selection.getRangeAt(0), clip.id);
+  highlightText(selection.getRangeAt(0), clip.id, isCodeBlock);
   
   // Update the modal content
   updateModalContent();
@@ -626,8 +648,15 @@ function hashString(str) {
 }
 
 // Highlight selected text in the DOM
-function highlightText(range, clipId) {
+function highlightText(range, clipId, isCodeBlock) {
   try {
+    // Check if we're in the modal - if so, don't apply highlights
+    const modal = document.getElementById('claude-notes-modal');
+    if (modal && modal.contains(range.commonAncestorContainer)) {
+      console.log('Skipping highlight in modal content');
+      return false;
+    }
+
     // Check if the selection crosses multiple node boundaries
     const startContainer = range.startContainer;
     const endContainer = range.endContainer;
@@ -635,18 +664,22 @@ function highlightText(range, clipId) {
     console.log('Highlighting range:', range.toString());
     console.log('Start container:', startContainer.nodeType, startContainer.nodeName);
     console.log('End container:', endContainer.nodeType, endContainer.nodeName);
+    console.log('Is code block:', isCodeBlock);
     
     // Simple case: selection is within a single text node
     if (startContainer === endContainer && startContainer.nodeType === Node.TEXT_NODE) {
       try {
         // Use surroundContents for simple text node selections
         const highlightSpan = document.createElement('span');
-        highlightSpan.className = 'claude-notes-highlight';
+        highlightSpan.className = isCodeBlock ? 'claude-notes-highlight code' : 'claude-notes-highlight';
         highlightSpan.dataset.clipId = clipId;
-        highlightSpan.style.textDecoration = 'underline';
-        highlightSpan.style.textDecorationColor = '#c96442';
-        highlightSpan.style.textDecorationThickness = '1px';
-        highlightSpan.style.position = 'relative';
+        
+        if (!isCodeBlock) {
+          highlightSpan.style.textDecoration = 'underline';
+          highlightSpan.style.textDecorationColor = '#c96442';
+          highlightSpan.style.textDecorationThickness = '1px';
+          highlightSpan.style.position = 'relative';
+        }
         
         const superscript = document.createElement('sup');
         superscript.textContent = clipId + 1; // Display 1-based indexing
@@ -671,12 +704,15 @@ function highlightText(range, clipId) {
       
       // Create highlight span
       const highlightSpan = document.createElement('span');
-      highlightSpan.className = 'claude-notes-highlight';
+      highlightSpan.className = isCodeBlock ? 'claude-notes-highlight code' : 'claude-notes-highlight';
       highlightSpan.dataset.clipId = clipId;
-      highlightSpan.style.textDecoration = 'underline';
-      highlightSpan.style.textDecorationColor = '#c96442';
-      highlightSpan.style.textDecorationThickness = '1px';
-      highlightSpan.style.position = 'relative';
+      
+      if (!isCodeBlock) {
+        highlightSpan.style.textDecoration = 'underline';
+        highlightSpan.style.textDecorationColor = '#c96442';
+        highlightSpan.style.textDecorationThickness = '1px';
+        highlightSpan.style.position = 'relative';
+      }
       
       // Create superscript number
       const superscript = document.createElement('sup');
@@ -713,11 +749,14 @@ function highlightText(range, clipId) {
                             range.startOffset + 5));
     
     const highlightSpan = document.createElement('span');
-    highlightSpan.className = 'claude-notes-highlight';
+    highlightSpan.className = isCodeBlock ? 'claude-notes-highlight code' : 'claude-notes-highlight';
     highlightSpan.dataset.clipId = clipId;
-    highlightSpan.style.textDecoration = 'underline';
-    highlightSpan.style.textDecorationColor = '#c96442';
-    highlightSpan.style.textDecorationThickness = '1px';
+    
+    if (!isCodeBlock) {
+      highlightSpan.style.textDecoration = 'underline';
+      highlightSpan.style.textDecorationColor = '#c96442';
+      highlightSpan.style.textDecorationThickness = '1px';
+    }
     
     // Create the superscript number
     const superscript = document.createElement('sup');
@@ -792,6 +831,11 @@ function applyHighlights(retryCount = 0, maxRetries = 5) {
     
     let found = false;
     
+    // Log if this is a code clip
+    if (clip.isCode) {
+      console.log('Attempting to highlight code clip:', clip.id);
+    }
+    
     // First try exact fingerprint match
     for (const container of potentialContainers) {
       try {
@@ -818,10 +862,34 @@ function applyHighlights(retryCount = 0, maxRetries = 5) {
         try {
           if (container.textContent.includes(clip.text)) {
             console.log('Found container with clip text');
+            
+            // For code blocks, check if this container has the right classes
+            if (clip.isCode) {
+              let isCodeContainer = false;
+              // Check if this container or any of its ancestors is a code block
+              let node = container;
+              while (node && node !== document.body) {
+                if (node.classList && 
+                    node.classList.contains('prismjs') && 
+                    node.classList.contains('code-block__code')) {
+                  isCodeContainer = true;
+                  console.log('Found code block container for code clip');
+                  break;
+                }
+                node = node.parentNode;
+              }
+              
+              // If this is a code clip but container is not a code block, skip it
+              if (!isCodeContainer) {
+                console.log('Container is not a code block, skipping for code clip');
+                continue;
+              }
+            }
+            
             // Create a range for this text
             const range = findTextInContainer(container, clip.text);
             if (range) {
-              highlightText(range, clip.id);
+              highlightText(range, clip.id, clip.isCode);
               found = true;
               highlightedCount++;
               break;
@@ -834,7 +902,7 @@ function applyHighlights(retryCount = 0, maxRetries = 5) {
     }
     
     if (!found) {
-      console.log('Could not find a match for clip:', clip.id);
+      console.log('Could not find a match for clip:', clip.id, 'isCode:', clip.isCode);
     }
   });
   
@@ -917,7 +985,7 @@ function highlightTextInContainer(container, clip) {
           range.setEnd(node, endInNode);
           
           // Highlight it
-          highlightText(range, clip.id);
+          highlightText(range, clip.id, clip.isCode);
           return true;
         }
       }
@@ -1103,11 +1171,23 @@ function updateModalContent() {
     clipNumber.style.alignItems = 'center';
     clipNumber.style.fontSize = '12px';
     
-    const clipText = document.createElement('p');
+    const clipText = document.createElement(clip.isCode ? 'code' : 'p');
     clipText.textContent = clip.text;
     clipText.style.margin = '0 0 5px 0';
     clipText.style.fontSize = '0.875rem';
     clipText.style.width = '95%';
+    
+    if (clip.isCode) {
+      clipText.style.display = 'block';
+      clipText.style.backgroundColor = '#1e1e1e';
+      clipText.style.color = '#d4d4d4';
+      clipText.style.padding = '8px';
+      clipText.style.borderRadius = '4px';
+      clipText.style.fontFamily = 'Menlo, Monaco, Courier New, monospace';
+      clipText.style.whiteSpace = 'nowrap';
+      clipText.style.overflowX = 'hidden';
+      clipText.style.textOverflow = 'ellipsis';
+    }
     
     // Create footer div to contain date and delete button
     const clipFooter = document.createElement('div');
@@ -1207,24 +1287,23 @@ function clearAllClips() {
 function loadClips() {
   chrome.storage.local.get(['claudeNotes', 'claudeNotesV2'], (result) => {
     if (result.claudeNotesV2) {
-      // New format with conversation IDs
+      // Use V2 format
       allClips = result.claudeNotesV2;
-      let needsUpdate = false;
       
-      // Check for and fix any conversation titles with wrong format
-      Object.keys(allClips).forEach(convId => {
-        const conversation = allClips[convId];
-        if (conversation.title && conversation.title.endsWith(' | Claude')) {
-          conversation.title = conversation.title.replace(' | Claude', '').trim();
-          // Flag that we need to save changes
+      // Check each conversation title and fix if needed
+      let needsUpdate = false;
+      Object.values(allClips).forEach(conversation => {
+        if (conversation.title && conversation.title.endsWith(' - Claude')) {
+          conversation.title = conversation.title.replace(' - Claude', '').trim();
+          conversation.lastUpdated = new Date().toISOString();
           needsUpdate = true;
         }
       });
       
-      // Save updates if we fixed any titles
+      // Save updates if any titles were corrected
       if (needsUpdate) {
         chrome.storage.local.set({ 'claudeNotesV2': allClips }, () => {
-          console.log('Fixed old conversation titles from " | Claude" to " - Claude" format');
+          console.log('Updated conversation titles');
         });
       }
       
@@ -1243,6 +1322,16 @@ function loadClips() {
           chrome.storage.local.set({ 'claudeNotesV2': allClips }, () => {
             console.log('Updated conversation title');
           });
+        }
+
+        // Show modal if we have clips and are in a conversation
+        if (clips.length > 0 && currentConversationId !== 'default') {
+          console.log('Found existing clips, showing modal...');
+          if (!noteModal) {
+            createModal();
+          }
+          noteModal.style.display = 'flex';
+          updateModalContent();
         }
       } else {
         // Initialize this conversation
