@@ -153,6 +153,9 @@ document.addEventListener('DOMContentLoaded', function() {
       clipContent.appendChild(codeElement);
     } else {
       clipContent.textContent = clip.text;
+      if (clip.isSecondary) {
+        clipContent.style.fontWeight = 'bold';
+      }
     }
     
     const clipMeta = document.createElement('div');
@@ -163,6 +166,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     const clipNumber = document.createElement('span');
     clipNumber.textContent = `#${clip.id + 1}`;
+    if (clip.isSecondary) {
+      clipNumber.style.color = '#444';
+    }
     
     clipMeta.appendChild(clipDate);
     clipMeta.appendChild(clipNumber);

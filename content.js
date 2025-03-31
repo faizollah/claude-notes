@@ -510,22 +510,32 @@ function handleTextSelection(e) {
 
 // Create a clip button near the selected text
 function createClipButton(selection, isCodeBlock) {
-  // Remove any existing button first
+  // Remove any existing buttons first
   const existingButton = document.getElementById('claude-notes-clip-button');
+  const existingSecondButton = document.getElementById('claude-notes-second-clip-button');
   if (existingButton) {
     document.body.removeChild(existingButton);
+  }
+  if (existingSecondButton) {
+    document.body.removeChild(existingSecondButton);
   }
   
   const range = selection.getRangeAt(0);
   const rect = range.getBoundingClientRect();
   
+  // Create container for buttons
+  const buttonContainer = document.createElement('div');
+  buttonContainer.style.position = 'absolute';
+  buttonContainer.style.left = `${rect.right + window.scrollX}px`;
+  buttonContainer.style.top = `${rect.top + window.scrollY - 30}px`;
+  buttonContainer.style.zIndex = '10001';
+  buttonContainer.style.display = 'flex';
+  buttonContainer.style.gap = '5px';
+  
+  // Primary clip button
   const clipButton = document.createElement('button');
   clipButton.id = 'claude-notes-clip-button';
   clipButton.textContent = isCodeBlock ? 'Clip Code' : 'Clip';
-  clipButton.style.position = 'absolute';
-  clipButton.style.left = `${rect.right + window.scrollX}px`;
-  clipButton.style.top = `${rect.top + window.scrollY - 30}px`;
-  clipButton.style.zIndex = '10001';
   clipButton.style.padding = '5px 10px';
   clipButton.style.backgroundColor = '#c96442';
   clipButton.style.color = 'white';
@@ -536,36 +546,58 @@ function createClipButton(selection, isCodeBlock) {
   clipButton.style.fontWeight = 'bold';
   clipButton.style.boxShadow = '0 2px 5px rgba(0, 0, 0, 0.2)';
   
+  // Secondary clip button
+  const secondClipButton = document.createElement('button');
+  secondClipButton.id = 'claude-notes-second-clip-button';
+  secondClipButton.textContent = 'Second action';
+  secondClipButton.style.padding = '5px 10px';
+  secondClipButton.style.backgroundColor = '#444';
+  secondClipButton.style.color = 'white';
+  secondClipButton.style.border = 'none';
+  secondClipButton.style.borderRadius = '4px';
+  secondClipButton.style.cursor = 'pointer';
+  secondClipButton.style.fontSize = '14px';
+  secondClipButton.style.fontWeight = 'bold';
+  secondClipButton.style.boxShadow = '0 2px 5px rgba(0, 0, 0, 0.2)';
+  
   clipButton.addEventListener('click', () => {
-    saveClip(selection, isCodeBlock);
-    // Don't remove the button immediately to provide visual feedback
+    saveClip(selection, isCodeBlock, false);
     clipButton.textContent = 'Saved!';
     clipButton.style.backgroundColor = '#4CAF50';
     setTimeout(() => {
-      if (document.body.contains(clipButton)) {
-        document.body.removeChild(clipButton);
+      if (document.body.contains(buttonContainer)) {
+        document.body.removeChild(buttonContainer);
       }
     }, 1000);
   });
   
-  document.body.appendChild(clipButton);
+  secondClipButton.addEventListener('click', () => {
+    saveClip(selection, isCodeBlock, true);
+    secondClipButton.textContent = 'Saved!';
+    secondClipButton.style.backgroundColor = '#4CAF50';
+    setTimeout(() => {
+      if (document.body.contains(buttonContainer)) {
+        document.body.removeChild(buttonContainer);
+      }
+    }, 1000);
+  });
   
-  // Remove clip button when clicking elsewhere or after a timeout
-  const removeClipButton = (e) => {
-    if (e && e.target === clipButton) return;
+  buttonContainer.appendChild(clipButton);
+  buttonContainer.appendChild(secondClipButton);
+  document.body.appendChild(buttonContainer);
+  
+  // Remove clip buttons when clicking elsewhere or after a timeout
+  const removeClipButtons = (e) => {
+    if (e && (e.target === clipButton || e.target === secondClipButton)) return;
     
-    // Only remove if it still exists
-    const button = document.getElementById('claude-notes-clip-button');
-    if (button) {
-      document.body.removeChild(button);
+    if (document.body.contains(buttonContainer)) {
+      document.body.removeChild(buttonContainer);
     }
-    document.removeEventListener('mousedown', removeClipButton);
+    document.removeEventListener('mousedown', removeClipButtons);
   };
   
-  document.addEventListener('mousedown', removeClipButton);
-  
-  // Set a longer timeout to ensure button visibility
-  setTimeout(() => removeClipButton(), 5000);
+  document.addEventListener('mousedown', removeClipButtons);
+  setTimeout(() => removeClipButtons(), 5000);
 }
 
 // Update the clip button position when selection changes
@@ -581,11 +613,11 @@ function updateClipButtonPosition(selection) {
 }
 
 // Save the selected text as a clip
-function saveClip(selection, isCodeBlock) {
+function saveClip(selection, isCodeBlock, isSecondary) {
   const selectedText = selection.toString().trim();
   if (!selectedText) return;
   
-  console.log('Saving clip, isCodeBlock:', isCodeBlock);
+  console.log('Saving clip, isCodeBlock:', isCodeBlock, 'isSecondary:', isSecondary);
   
   // Create a new clip object
   const clip = {
@@ -594,7 +626,8 @@ function saveClip(selection, isCodeBlock) {
     timestamp: new Date().toISOString(),
     range: getRangeInfo(selection.getRangeAt(0)),
     url: window.location.href,
-    isCode: isCodeBlock // Add flag for code clips
+    isCode: isCodeBlock, // Add flag for code clips
+    isSecondary: isSecondary // Add flag for secondary action
   };
   
   // Add to clips array for current conversation
@@ -610,7 +643,7 @@ function saveClip(selection, isCodeBlock) {
   });
   
   // Highlight the selected text
-  highlightText(selection.getRangeAt(0), clip.id, isCodeBlock);
+  highlightText(selection.getRangeAt(0), clip.id, isCodeBlock, isSecondary);
   
   // Update the modal content
   updateModalContent();
@@ -648,7 +681,7 @@ function hashString(str) {
 }
 
 // Highlight selected text in the DOM
-function highlightText(range, clipId, isCodeBlock) {
+function highlightText(range, clipId, isCodeBlock, isSecondary) {
   try {
     // Check if we're in the modal - if so, don't apply highlights
     const modal = document.getElementById('claude-notes-modal');
@@ -664,7 +697,7 @@ function highlightText(range, clipId, isCodeBlock) {
     console.log('Highlighting range:', range.toString());
     console.log('Start container:', startContainer.nodeType, startContainer.nodeName);
     console.log('End container:', endContainer.nodeType, endContainer.nodeName);
-    console.log('Is code block:', isCodeBlock);
+    console.log('Is code block:', isCodeBlock, 'Is secondary:', isSecondary);
     
     // Simple case: selection is within a single text node
     if (startContainer === endContainer && startContainer.nodeType === Node.TEXT_NODE) {
@@ -672,6 +705,7 @@ function highlightText(range, clipId, isCodeBlock) {
         // Use surroundContents for simple text node selections
         const highlightSpan = document.createElement('span');
         highlightSpan.className = isCodeBlock ? 'claude-notes-highlight code' : 'claude-notes-highlight';
+        if (isSecondary) highlightSpan.classList.add('secondary');
         highlightSpan.dataset.clipId = clipId;
         
         if (!isCodeBlock) {
@@ -683,7 +717,7 @@ function highlightText(range, clipId, isCodeBlock) {
         
         const superscript = document.createElement('sup');
         superscript.textContent = clipId + 1; // Display 1-based indexing
-        superscript.style.color = '#c96442';
+        superscript.style.color = isSecondary ? '#444' : '#c96442';
         superscript.style.verticalAlign = 'baseline';
         
         // Clone the range to avoid modifying the original
@@ -705,6 +739,7 @@ function highlightText(range, clipId, isCodeBlock) {
       // Create highlight span
       const highlightSpan = document.createElement('span');
       highlightSpan.className = isCodeBlock ? 'claude-notes-highlight code' : 'claude-notes-highlight';
+      if (isSecondary) highlightSpan.classList.add('secondary');
       highlightSpan.dataset.clipId = clipId;
       
       if (!isCodeBlock) {
@@ -712,12 +747,15 @@ function highlightText(range, clipId, isCodeBlock) {
         highlightSpan.style.textDecorationColor = '#c96442';
         highlightSpan.style.textDecorationThickness = '1px';
         highlightSpan.style.position = 'relative';
+        if (isSecondary) {
+          // Removed the bold styling for secondary action
+        }
       }
       
       // Create superscript number
       const superscript = document.createElement('sup');
       superscript.textContent = clipId + 1; // Display 1-based indexing
-      superscript.style.color = '#c96442';
+      superscript.style.color = isSecondary ? '#444' : '#c96442';
       superscript.style.fontWeight = 'bold';
       superscript.style.verticalAlign = 'baseline';
       
@@ -750,18 +788,22 @@ function highlightText(range, clipId, isCodeBlock) {
     
     const highlightSpan = document.createElement('span');
     highlightSpan.className = isCodeBlock ? 'claude-notes-highlight code' : 'claude-notes-highlight';
+    if (isSecondary) highlightSpan.classList.add('secondary');
     highlightSpan.dataset.clipId = clipId;
     
     if (!isCodeBlock) {
       highlightSpan.style.textDecoration = 'underline';
       highlightSpan.style.textDecorationColor = '#c96442';
       highlightSpan.style.textDecorationThickness = '1px';
+      if (isSecondary) {
+        // Removed the bold styling for secondary action
+      }
     }
     
     // Create the superscript number
     const superscript = document.createElement('sup');
     superscript.textContent = clipId + 1; // Display 1-based indexing
-    superscript.style.color = '#c96442';
+    superscript.style.color = isSecondary ? '#444' : '#c96442';
     superscript.style.fontWeight = 'bold';
     superscript.style.verticalAlign = 'baseline';
     
@@ -889,7 +931,7 @@ function applyHighlights(retryCount = 0, maxRetries = 5) {
             // Create a range for this text
             const range = findTextInContainer(container, clip.text);
             if (range) {
-              highlightText(range, clip.id, clip.isCode);
+              highlightText(range, clip.id, clip.isCode, clip.isSecondary);
               found = true;
               highlightedCount++;
               break;
@@ -985,7 +1027,7 @@ function highlightTextInContainer(container, clip) {
           range.setEnd(node, endInNode);
           
           // Highlight it
-          highlightText(range, clip.id, clip.isCode);
+          highlightText(range, clip.id, clip.isCode, clip.isSecondary);
           return true;
         }
       }
@@ -1161,7 +1203,7 @@ function updateModalContent() {
     clipNumber.style.position = 'absolute';
     clipNumber.style.top = '5px';
     clipNumber.style.right = '5px';
-    clipNumber.style.backgroundColor = '#c96442';
+    clipNumber.style.backgroundColor = clip.isSecondary ? '#444' : '#c96442';
     clipNumber.style.color = 'white';
     clipNumber.style.width = '20px';
     clipNumber.style.height = '20px';
@@ -1176,49 +1218,43 @@ function updateModalContent() {
     clipText.style.margin = '0 0 5px 0';
     clipText.style.fontSize = '0.875rem';
     clipText.style.width = '95%';
+    clipText.style.overflowX = 'hidden';
+    clipText.style.textOverflow = 'ellipsis';
     
-    if (clip.isCode) {
-      clipText.style.display = 'block';
-      clipText.style.backgroundColor = '#1e1e1e';
-      clipText.style.color = '#d4d4d4';
-      clipText.style.padding = '8px';
-      clipText.style.borderRadius = '4px';
-      clipText.style.fontFamily = 'Menlo, Monaco, Courier New, monospace';
-      clipText.style.whiteSpace = 'nowrap';
-      clipText.style.overflowX = 'hidden';
-      clipText.style.textOverflow = 'ellipsis';
+    if (clip.isSecondary && !clip.isCode) {
+      clipText.style.fontWeight = 'bold';
     }
     
-    // Create footer div to contain date and delete button
+    if (clip.isCode) {
+      clipText.className = 'code-block';
+    }
+    
     const clipFooter = document.createElement('div');
     clipFooter.style.display = 'flex';
     clipFooter.style.justifyContent = 'space-between';
     clipFooter.style.alignItems = 'center';
-    clipFooter.style.marginTop = '8px';
+    clipFooter.style.marginTop = '5px';
     
-    const clipDate = document.createElement('small');
+    const clipDate = document.createElement('span');
     clipDate.textContent = new Date(clip.timestamp).toLocaleString();
-    clipDate.style.color = '#999';
+    clipDate.style.color = '#666';
+    clipDate.style.fontSize = '0.75rem';
     
     const deleteButton = document.createElement('button');
-    deleteButton.textContent = 'Delete';
-    deleteButton.style.padding = '4px 8px';
-    deleteButton.style.backgroundColor = '#f44336';
-    deleteButton.style.color = 'white';
+    deleteButton.textContent = '×';
+    deleteButton.style.background = 'none';
     deleteButton.style.border = 'none';
-    deleteButton.style.borderRadius = '4px';
+    deleteButton.style.color = '#666';
+    deleteButton.style.fontSize = '1.25rem';
     deleteButton.style.cursor = 'pointer';
-    deleteButton.style.fontSize = '12px';
-    
+    deleteButton.style.padding = '0 5px';
     deleteButton.addEventListener('click', () => {
       deleteClip(clip.id);
     });
     
-    // Add date and delete button to footer
     clipFooter.appendChild(clipDate);
     clipFooter.appendChild(deleteButton);
     
-    // Assemble clip element
     clipElement.appendChild(clipNumber);
     clipElement.appendChild(clipText);
     clipElement.appendChild(clipFooter);
