@@ -964,6 +964,14 @@ function clearAllHighlights() {
   console.log('Clearing all existing highlights');
   
   try {
+    // First remove any orphaned superscript elements
+    const orphanedSups = document.querySelectorAll('sup');
+    orphanedSups.forEach(sup => {
+      if (sup.parentNode) {
+        sup.parentNode.removeChild(sup);
+      }
+    });
+
     const highlights = document.querySelectorAll('.claude-notes-highlight');
     
     if (highlights.length === 0) {
@@ -981,17 +989,13 @@ function clearAllHighlights() {
           return;
         }
         
-        // Move all children out before removing the highlight element
-        // This preserves the original text
+        // Remove all superscript elements first
+        const sups = highlight.querySelectorAll('sup');
+        sups.forEach(sup => sup.remove());
+        
+        // Move remaining children (text nodes) out before removing the highlight element
         while (highlight.firstChild) {
-          if (highlight.firstChild.nodeType === Node.ELEMENT_NODE && 
-              highlight.firstChild.tagName === 'SUP') {
-            // Remove superscript nodes
-            highlight.removeChild(highlight.firstChild);
-          } else {
-            // Move text nodes and other elements back to parent
-            parent.insertBefore(highlight.firstChild, highlight);
-          }
+          parent.insertBefore(highlight.firstChild, highlight);
         }
         
         // Remove the empty highlight span
@@ -1189,7 +1193,9 @@ function updateModalContent() {
   }
   
   // Create clips list
-  clips.forEach(clip => {
+  // Sort clips in descending order (newest first)
+  const sortedClips = [...clips].reverse();
+  sortedClips.forEach(clip => {
     const clipElement = document.createElement('div');
     clipElement.className = 'claude-notes-clip';
     clipElement.style.padding = '10px';
@@ -1197,27 +1203,25 @@ function updateModalContent() {
     clipElement.style.border = '1px solid #eee';
     clipElement.style.borderRadius = '4px';
     clipElement.style.position = 'relative';
+    clipElement.style.display = 'flex';
+    clipElement.style.flexDirection = 'column'; // Make it vertical
+    clipElement.style.gap = '8px';
     
     const clipNumber = document.createElement('div');
     clipNumber.textContent = clip.id + 1;
-    clipNumber.style.position = 'absolute';
-    clipNumber.style.top = '5px';
-    clipNumber.style.right = '5px';
-    clipNumber.style.backgroundColor = clip.isSecondary ? '#444' : '#c96442';
-    clipNumber.style.color = 'white';
-    clipNumber.style.width = '20px';
-    clipNumber.style.height = '20px';
-    clipNumber.style.borderRadius = '50%';
-    clipNumber.style.display = 'flex';
-    clipNumber.style.justifyContent = 'center';
-    clipNumber.style.alignItems = 'center';
-    clipNumber.style.fontSize = '12px';
+    clipNumber.style.color = clip.isSecondary ? '#444' : '#c96442';
+    clipNumber.style.fontSize = '14px';
+    clipNumber.style.fontWeight = 'bold';
+    
+    const clipContent = document.createElement('div');
+    clipContent.style.flex = '1';
+    clipContent.style.minWidth = '0';
     
     const clipText = document.createElement(clip.isCode ? 'code' : 'p');
     clipText.textContent = clip.text;
-    clipText.style.margin = '0 0 5px 0';
+    clipText.style.margin = '0';
     clipText.style.fontSize = '0.875rem';
-    clipText.style.width = '95%';
+    clipText.style.width = '100%';
     clipText.style.overflowX = 'hidden';
     clipText.style.textOverflow = 'ellipsis';
     
@@ -1229,19 +1233,11 @@ function updateModalContent() {
       clipText.className = 'code-block';
     }
     
-    const clipFooter = document.createElement('div');
-    clipFooter.style.display = 'flex';
-    clipFooter.style.justifyContent = 'space-between';
-    clipFooter.style.alignItems = 'center';
-    clipFooter.style.marginTop = '5px';
-    
-    const clipDate = document.createElement('span');
-    clipDate.textContent = new Date(clip.timestamp).toLocaleString();
-    clipDate.style.color = '#666';
-    clipDate.style.fontSize = '0.75rem';
-    
     const deleteButton = document.createElement('button');
     deleteButton.textContent = '×';
+    deleteButton.style.position = 'absolute';
+    deleteButton.style.top = '8px';
+    deleteButton.style.right = '8px';
     deleteButton.style.background = 'none';
     deleteButton.style.border = 'none';
     deleteButton.style.color = '#666';
@@ -1252,12 +1248,11 @@ function updateModalContent() {
       deleteClip(clip.id);
     });
     
-    clipFooter.appendChild(clipDate);
-    clipFooter.appendChild(deleteButton);
+    clipContent.appendChild(clipText);
     
     clipElement.appendChild(clipNumber);
-    clipElement.appendChild(clipText);
-    clipElement.appendChild(clipFooter);
+    clipElement.appendChild(clipContent);
+    clipElement.appendChild(deleteButton);
     
     modalContent.appendChild(clipElement);
   });
@@ -1268,8 +1263,13 @@ function deleteClip(clipId) {
   // Remove highlight from DOM
   const highlight = document.querySelector(`.claude-notes-highlight[data-clip-id="${clipId}"]`);
   if (highlight) {
-    // Replace the highlight with its text content
     const parent = highlight.parentNode;
+    
+    // First remove all superscript elements
+    const sups = highlight.querySelectorAll('sup');
+    sups.forEach(sup => sup.remove());
+    
+    // Move remaining text content back to parent
     while (highlight.firstChild) {
       parent.insertBefore(highlight.firstChild, highlight);
     }
@@ -1295,27 +1295,10 @@ function deleteClip(clipId) {
 // Clear all clips from current conversation
 function clearAllClips() {
   if (confirm('Are you sure you want to clear all notes from this conversation?')) {
-    // Remove all highlights from DOM
-    document.querySelectorAll('.claude-notes-highlight').forEach(highlight => {
-      const parent = highlight.parentNode;
-      while (highlight.firstChild) {
-        parent.insertBefore(highlight.firstChild, highlight);
-      }
-      parent.removeChild(highlight);
+    // Use deleteClip for each clip to ensure consistent cleanup
+    [...clips].forEach(clip => {
+      deleteClip(clip.id);
     });
-    
-    // Clear clips array for this conversation
-    clips = [];
-    allClips[currentConversationId].clips = [];
-    allClips[currentConversationId].lastUpdated = new Date().toISOString();
-    
-    // Update storage
-    chrome.storage.local.set({ 'claudeNotesV2': allClips }, () => {
-      console.log('Claude Notes: All clips cleared from conversation', currentConversationId);
-    });
-    
-    // Update modal
-    updateModalContent();
   }
 }
 
