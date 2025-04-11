@@ -37,6 +37,7 @@
   border-radius: 3px;
   margin-right: 4px;
   font-size: 10px;
+  font-weight: bold;
 }
 
 #claude-notes-modal {
@@ -52,6 +53,18 @@
 #claude-notes-modal a:hover {
   transform: scale(1.05);
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Icon button styles */
+#claude-notes-modal button svg,
+.claude-notes-clip button svg {
+  transition: all 0.2s ease;
+}
+
+#claude-notes-modal button:hover svg,
+.claude-notes-clip button:hover svg {
+  transform: scale(1.1);
+  stroke: #c96442;
 }
 
 #claude-notes-clip-button {

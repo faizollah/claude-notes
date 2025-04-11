@@ -1,3 +1,147 @@
+// Style utility functions
+const styles = {
+  colors: {
+    primary: '#c96442',
+    border: '#ddd',
+    background: {
+      light: '#f5f5f5',
+      white: '#fff'
+    },
+    text: {
+      normal: '#666',
+      dark: '#000'
+    }
+  },
+  spacing: {
+    xs: '4px',
+    sm: '8px',
+    md: '12px',
+    lg: '16px'
+  }
+};
+
+const createStyleObject = (...objects) => Object.assign({}, ...objects);
+
+const baseStyles = {
+  modal: {
+    position: 'fixed',
+    display: 'flex',
+    flexDirection: 'column',
+    backgroundColor: styles.colors.background.white,
+    border: `1px solid #ccc`,
+    borderRadius: '8px',
+    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)',
+    zIndex: '10000',
+    overflow: 'hidden',
+    fontFamily: 'Arial, sans-serif'
+  },
+  header: {
+    padding: styles.spacing.md,
+    backgroundColor: styles.colors.background.light,
+    borderBottom: `1px solid ${styles.colors.border}`,
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  button: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer'
+  },
+  container: {
+    display: 'flex',
+    borderBottom: `1px solid ${styles.colors.border}`,
+    backgroundColor: styles.colors.background.light
+  },
+  tab: {
+    padding: `${styles.spacing.sm} ${styles.spacing.lg}`,
+    border: 'none',
+    borderBottom: '2px solid transparent',
+    backgroundColor: 'transparent',
+    cursor: 'pointer',
+    flex: '1',
+    fontSize: '14px'
+  },
+  tabActive: {
+    fontWeight: 'bold',
+    borderBottom: `2px solid ${styles.colors.primary}`
+  },
+  content: {
+    padding: styles.spacing.md,
+    overflowY: 'auto',
+    flex: '1'
+  },
+  actions: {
+    padding: styles.spacing.md,
+    borderTop: `1px solid ${styles.colors.border}`,
+    display: 'flex',
+    justifyContent: 'space-between'
+  },
+  actionButton: {
+    padding: `${styles.spacing.sm} ${styles.spacing.md}`,
+    borderRadius: '4px',
+    cursor: 'pointer',
+    color: styles.colors.background.white,
+    textDecoration: 'none',
+    display: 'inline-block'
+  },
+  clip: {
+    padding: styles.spacing.sm,
+    marginBottom: styles.spacing.sm,
+    border: `1px solid ${styles.colors.border}`,
+    borderRadius: '4px',
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: styles.spacing.sm
+  },
+  clipNumber: {
+    fontSize: '14px',
+    fontWeight: 'bold'
+  },
+  clipContent: {
+    flex: '1',
+    minWidth: '0'
+  },
+  clipText: {
+    margin: '0',
+    fontSize: '0.875rem',
+    width: '100%',
+    overflowX: 'hidden',
+    textOverflow: 'ellipsis'
+  },
+  clipTextSecondary: {
+    fontStyle: 'italic'
+  },
+  codeClip: {
+    display: 'block',
+    backgroundColor: '#1e1e1e',
+    color: '#d4d4d4',
+    padding: '12px',
+    borderRadius: '4px',
+    fontFamily: '"Fira Code", "Menlo", "Monaco", "Courier New", monospace',
+    whiteSpace: 'pre',
+    overflowX: 'auto',
+    fontSize: '13px',
+    maxHeight: '300px',
+    overflowY: 'auto'
+  },
+  deleteButton: {
+    position: 'absolute',
+    top: styles.spacing.sm,
+    right: styles.spacing.sm,
+    background: 'none',
+    border: 'none',
+    color: styles.colors.text.normal,
+    fontSize: '1.25rem',
+    cursor: 'pointer',
+  }
+};
+
+const applyStyles = (element, styleObject) => {
+  Object.assign(element.style, styleObject);
+};
+
 // Global variables
 let noteModal;
 let clips = [];
@@ -8,6 +152,31 @@ let conversationTitle = '';
 let needsUpdate = false;
 let lastUrl = ''; // Track URL for SPA navigation detection
 let activeTab = 'clips'; // Track active tab
+
+// Style utility functions
+const buttonStyles = {
+  base: {
+    padding: '5px 10px',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 'bold',
+    boxShadow: '0 2px 5px rgba(0, 0, 0, 0.2)'
+  },
+  container: {
+    position: 'absolute',
+    zIndex: '10001',
+    display: 'flex',
+    gap: '5px'
+  }
+};
+
+const applyButtonStyles = (button, type = 'primary') => {
+  Object.assign(button.style, buttonStyles.base);
+  button.style.backgroundColor = type === 'primary' ? '#c96442' : '#444';
+};
 
 // Initialize extension
 function init() {
@@ -215,44 +384,34 @@ function createModal() {
   // Create modal container
   noteModal = document.createElement('div');
   noteModal.id = 'claude-notes-modal';
-  noteModal.style.position = 'fixed';
-  noteModal.style.top = '50px';
-  noteModal.style.right = '50px';
-  noteModal.style.width = '300px';
-  noteModal.style.minHeight = '100px';
-  noteModal.style.maxHeight = '500px';
-  noteModal.style.backgroundColor = '#fff';
-  noteModal.style.border = '1px solid #ccc';
-  noteModal.style.borderRadius = '8px';
-  noteModal.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.1)';
-  noteModal.style.zIndex = '10000';
-  noteModal.style.overflow = 'hidden';
-  noteModal.style.display = 'none'; // Start hidden
-  noteModal.style.flexDirection = 'column';
-  noteModal.style.fontFamily = 'Arial, sans-serif';
+  applyStyles(noteModal, createStyleObject(baseStyles.modal, {
+    top: '100px',
+    right: '50px',
+    width: '300px',
+    minHeight: '100px',
+    maxHeight: '500px',
+    display: 'none' // Start hidden
+  }));
   
   // Create modal header
   const modalHeader = document.createElement('div');
   modalHeader.id = 'claude-notes-header';
-  modalHeader.style.padding = '12px';
-  modalHeader.style.backgroundColor = '#f5f5f5';
-  modalHeader.style.borderBottom = '1px solid #ddd';
-  modalHeader.style.cursor = 'move';
-  modalHeader.style.display = 'flex';
-  modalHeader.style.justifyContent = 'space-between';
-  modalHeader.style.alignItems = 'center';
+  applyStyles(modalHeader, baseStyles.header);
   
   const modalTitle = document.createElement('span');
-  modalTitle.id = 'claude-notes-title';
   modalTitle.textContent = 'Claude Notes';
-  modalTitle.style.fontWeight = 'bold';
+  applyStyles(modalTitle, {
+    fontWeight: 'bold'
+  });
   
   const closeButton = document.createElement('button');
-  closeButton.textContent = '✕';
-  closeButton.style.background = 'none';
-  closeButton.style.border = 'none';
-  closeButton.style.cursor = 'pointer';
-  closeButton.style.fontSize = '16px';
+  applyStyles(closeButton, createStyleObject(baseStyles.button, {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '4px'
+  }));
+  closeButton.appendChild(ClaudeIcons.createIcon('x', 20, styles.colors.text.normal));
   closeButton.addEventListener('click', () => {
     noteModal.style.display = 'none';
   });
@@ -262,9 +421,7 @@ function createModal() {
 
   // Create tab container
   const tabContainer = document.createElement('div');
-  tabContainer.style.display = 'flex';
-  tabContainer.style.borderBottom = '1px solid #ddd';
-  tabContainer.style.backgroundColor = '#f5f5f5';
+  applyStyles(tabContainer, baseStyles.container);
 
   // Create tabs
   const clipsTab = createTabButton('Clips', 'clips');
@@ -276,16 +433,11 @@ function createModal() {
   // Create modal content
   const modalContent = document.createElement('div');
   modalContent.id = 'claude-notes-content';
-  modalContent.style.padding = '12px';
-  modalContent.style.overflowY = 'auto';
-  modalContent.style.flex = '1';
+  applyStyles(modalContent, baseStyles.content);
   
   // Create modal actions
   const modalActions = document.createElement('div');
-  modalActions.style.padding = '12px';
-  modalActions.style.borderTop = '1px solid #ddd';
-  modalActions.style.display = 'flex';
-  modalActions.style.justifyContent = 'space-between';
+  applyStyles(modalActions, baseStyles.actions);
   
   // Add "View All Notes" link
   const viewAllLink = document.createElement('a');
@@ -305,12 +457,9 @@ function createModal() {
   
   const clearButton = document.createElement('button');
   clearButton.textContent = 'Clear All';
-  clearButton.style.padding = '8px 12px';
-  clearButton.style.backgroundColor = '#f44336';
-  clearButton.style.color = 'white';
-  clearButton.style.border = 'none';
-  clearButton.style.borderRadius = '4px';
-  clearButton.style.cursor = 'pointer';
+  applyStyles(clearButton, createStyleObject(baseStyles.actionButton, {
+    backgroundColor: '#f44336'
+  }));
   clearButton.addEventListener('click', clearAllClips);
   
   modalActions.appendChild(viewAllLink);
@@ -324,27 +473,20 @@ function createModal() {
   
   // Add modal to document
   document.body.appendChild(noteModal);
-  
-  // Make modal draggable
-  makeDraggable(noteModal, modalHeader);
 }
 
 // Create a tab button
 function createTabButton(text, tabId) {
   const tab = document.createElement('button');
   tab.textContent = text;
-  tab.style.padding = '8px 16px';
-  tab.style.border = 'none';
-  tab.style.borderBottom = '2px solid transparent';
-  tab.style.backgroundColor = 'transparent';
-  tab.style.cursor = 'pointer';
-  tab.style.flex = '1';
-  tab.style.fontSize = '14px';
-  tab.style.fontWeight = activeTab === tabId ? 'bold' : 'normal';
-  tab.style.borderBottom = activeTab === tabId ? '2px solid #c96442' : '2px solid transparent';
+  
+  const isActive = activeTab === tabId;
+  applyStyles(tab, createStyleObject(
+    baseStyles.tab,
+    isActive ? baseStyles.tabActive : {}
+  ));
   
   tab.addEventListener('click', () => switchTab(tabId));
-  
   return tab;
 }
 
@@ -366,77 +508,6 @@ function switchTab(tabId) {
   
   // Update content
   updateModalContent();
-}
-
-// Make an element draggable
-function makeDraggable(element, handle) {
-  let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-  const minDistanceFromEdge = 50; // Minimum distance from window edges
-  
-  handle.onmousedown = dragMouseDown;
-  
-  function dragMouseDown(e) {
-    e = e || window.event;
-    e.preventDefault();
-    // Get the mouse cursor position at startup
-    pos3 = e.clientX;
-    pos4 = e.clientY;
-    document.onmouseup = closeDragElement;
-    // Call a function whenever the cursor moves
-    document.onmousemove = elementDrag;
-  }
-  
-  function elementDrag(e) {
-    e = e || window.event;
-    e.preventDefault();
-    // Calculate the new cursor position
-    pos1 = pos3 - e.clientX;
-    pos2 = pos4 - e.clientY;
-    pos3 = e.clientX;
-    pos4 = e.clientY;
-    
-    // Calculate new position
-    const newTop = element.offsetTop - pos2;
-    const newLeft = element.offsetLeft - pos1;
-    
-    // Get window dimensions
-    const windowWidth = window.innerWidth;
-    const windowHeight = window.innerHeight;
-    
-    // Apply constraints - ensure element stays within bounds
-    // Top constraint
-    if (newTop < minDistanceFromEdge) {
-      element.style.top = `${minDistanceFromEdge}px`;
-    } 
-    // Bottom constraint
-    else if (newTop + element.offsetHeight > windowHeight - minDistanceFromEdge) {
-      element.style.top = `${windowHeight - element.offsetHeight - minDistanceFromEdge}px`;
-    } 
-    else {
-      element.style.top = `${newTop}px`;
-    }
-    
-    // Left constraint
-    if (newLeft < minDistanceFromEdge) {
-      element.style.left = `${minDistanceFromEdge}px`;
-    } 
-    // Right constraint
-    else if (newLeft + element.offsetWidth > windowWidth - minDistanceFromEdge) {
-      element.style.left = `${windowWidth - element.offsetWidth - minDistanceFromEdge}px`;
-    } 
-    else {
-      element.style.left = `${newLeft}px`;
-    }
-    
-    // If moving from default position, set right to auto
-    element.style.right = 'auto';
-  }
-  
-  function closeDragElement() {
-    // Stop moving when mouse button is released
-    document.onmouseup = null;
-    document.onmousemove = null;
-  }
 }
 
 // Find the Claude message container from a node
@@ -528,16 +599,42 @@ function handleTextSelection(e) {
   // Check if selection is within a code block
   let isCodeBlock = false;
   let node = selection.anchorNode;
+  
+  // Debug logging for node traversal
+  console.log('Starting node type:', node.nodeType);
+  console.log('Starting node name:', node.nodeName);
+  
+  // Log the parent elements to help debug the hierarchy
+  let parentChain = [];
+  let currentNode = node;
+  while (currentNode && currentNode !== document.body) {
+    parentChain.push({
+      nodeName: currentNode.nodeName,
+      classList: currentNode.classList ? Array.from(currentNode.classList) : []
+    });
+    currentNode = currentNode.parentNode;
+  }
+  console.log('Parent element chain:', parentChain);
+  
+  // Reset node for actual code block check
+  node = selection.anchorNode;
   while (node && node !== document.body) {
-    if (node.classList && 
-        node.classList.contains('prismjs') && 
-        node.classList.contains('code-block__code')) {
+    if (node.nodeName === 'CODE' || 
+        (node.classList && 
+         node.classList.contains('prismjs') && 
+         node.classList.contains('code-block__code'))) {
       isCodeBlock = true;
-      console.log('Selection is within a code block');
+      console.log('Found code block:', {
+        nodeName: node.nodeName,
+        classList: node.classList ? Array.from(node.classList) : [],
+        parentNodeName: node.parentNode ? node.parentNode.nodeName : null
+      });
       break;
     }
     node = node.parentNode;
   }
+  
+  console.log('Is code block:', isCodeBlock);
   
   // Check if selection is within a Claude message
   const range = selection.getRangeAt(0);
@@ -545,9 +642,9 @@ function handleTextSelection(e) {
   
   if (container || isCodeBlock) {
     if (isCodeBlock) {
-      console.log('Found code block selection');
+      console.log('Creating clip button for code block selection');
     } else {
-      console.log('Found message container:', container);
+      console.log('Creating clip button for regular text selection');
     }
     
     // Create clip button near selection if it doesn't exist
@@ -579,40 +676,21 @@ function createClipButton(selection, isCodeBlock) {
   
   // Create container for buttons
   const buttonContainer = document.createElement('div');
-  buttonContainer.style.position = 'absolute';
+  Object.assign(buttonContainer.style, buttonStyles.container);
   buttonContainer.style.left = `${rect.right + window.scrollX}px`;
   buttonContainer.style.top = `${rect.top + window.scrollY - 30}px`;
-  buttonContainer.style.zIndex = '10001';
-  buttonContainer.style.display = 'flex';
-  buttonContainer.style.gap = '5px';
   
   // Primary clip button
   const clipButton = document.createElement('button');
   clipButton.id = 'claude-notes-clip-button';
   clipButton.textContent = isCodeBlock ? 'Clip Code' : 'Clip';
-  clipButton.style.padding = '5px 10px';
-  clipButton.style.backgroundColor = '#c96442';
-  clipButton.style.color = 'white';
-  clipButton.style.border = 'none';
-  clipButton.style.borderRadius = '4px';
-  clipButton.style.cursor = 'pointer';
-  clipButton.style.fontSize = '14px';
-  clipButton.style.fontWeight = 'bold';
-  clipButton.style.boxShadow = '0 2px 5px rgba(0, 0, 0, 0.2)';
+  applyButtonStyles(clipButton, 'primary');
   
   // Secondary clip button
   const secondClipButton = document.createElement('button');
   secondClipButton.id = 'claude-notes-second-clip-button';
   secondClipButton.textContent = 'Annotate';
-  secondClipButton.style.padding = '5px 10px';
-  secondClipButton.style.backgroundColor = '#444';
-  secondClipButton.style.color = 'white';
-  secondClipButton.style.border = 'none';
-  secondClipButton.style.borderRadius = '4px';
-  secondClipButton.style.cursor = 'pointer';
-  secondClipButton.style.fontSize = '14px';
-  secondClipButton.style.fontWeight = 'bold';
-  secondClipButton.style.boxShadow = '0 2px 5px rgba(0, 0, 0, 0.2)';
+  applyButtonStyles(secondClipButton, 'secondary');
   
   clipButton.addEventListener('click', () => {
     saveClip(selection, isCodeBlock, false);
@@ -666,44 +744,109 @@ function updateClipButtonPosition(selection) {
   clipButton.style.top = `${rect.top + window.scrollY - 30}px`;
 }
 
-// Save the selected text as a clip
+// Add this new function to recalculate clip IDs
+function recalculateClipIds() {
+    // Sort clips by their current IDs to maintain relative order
+    clips.sort((a, b) => a.id - b.id);
+    
+    // Reassign IDs sequentially
+    clips.forEach((clip, index) => {
+        clip.id = index;
+        
+        // Update the highlight in the DOM
+        const highlight = document.querySelector(`.claude-notes-highlight[data-clip-id="${clip.id}"]`);
+        if (highlight) {
+            highlight.dataset.clipId = index;
+            // Update the superscript number
+            const sup = highlight.querySelector('sup');
+            if (sup) {
+                sup.textContent = index + 1;
+            }
+        }
+    });
+    
+    // Set currentClipId to next available number
+    currentClipId = clips.length;
+}
+
+// Modify the deleteClip function
+function deleteClip(clipId) {
+    // Remove highlight from DOM
+    const highlight = document.querySelector(`.claude-notes-highlight[data-clip-id="${clipId}"]`);
+    if (highlight) {
+        const parent = highlight.parentNode;
+        
+        // First remove all superscript elements
+        const sups = highlight.querySelectorAll('sup');
+        sups.forEach(sup => sup.remove());
+        
+        // Move remaining text content back to parent
+        while (highlight.firstChild) {
+            parent.insertBefore(highlight.firstChild, highlight);
+        }
+        parent.removeChild(highlight);
+    }
+    
+    // Remove from clips array
+    clips = clips.filter(clip => clip.id !== clipId);
+    
+    // Recalculate IDs
+    recalculateClipIds();
+    
+    // Update the master object
+    allClips[currentConversationId].clips = clips;
+    allClips[currentConversationId].lastUpdated = new Date().toISOString();
+    
+    // Update storage
+    chrome.storage.local.set({ 'claudeNotesV2': allClips }, () => {
+        console.log('Claude Notes: Clip deleted from conversation', currentConversationId);
+    });
+    
+    // Update modal
+    updateModalContent();
+}
+
+// Modify the saveClip function
 function saveClip(selection, isCodeBlock, isSecondary) {
-  const selectedText = selection.toString().trim();
-  if (!selectedText) return;
-  
-  console.log('Saving clip, isCodeBlock:', isCodeBlock, 'isSecondary:', isSecondary);
-  
-  // Create a new clip object
-  const clip = {
-    id: currentClipId++,
-    text: selectedText,
-    timestamp: new Date().toISOString(),
-    range: getRangeInfo(selection.getRangeAt(0)),
-    url: window.location.href,
-    isCode: isCodeBlock, // Add flag for code clips
-    isSecondary: isSecondary // Add flag for secondary action
-  };
-  
-  // Add to clips array for current conversation
-  clips.push(clip);
-  
-  // Update the master object
-  allClips[currentConversationId].clips = clips;
-  allClips[currentConversationId].lastUpdated = new Date().toISOString();
-  
-  // Save to Chrome storage
-  chrome.storage.local.set({ 'claudeNotesV2': allClips }, () => {
-    console.log('Claude Notes: Clip saved to conversation', currentConversationId);
-  });
-  
-  // Highlight the selected text
-  highlightText(selection.getRangeAt(0), clip.id, isCodeBlock, isSecondary);
-  
-  // Update the modal content
-  updateModalContent();
-  
-  // Show the modal
-  noteModal.style.display = 'flex';
+    const selectedText = selection.toString().trim();
+    if (!selectedText) return;
+    
+    console.log('Saving clip, isCodeBlock:', isCodeBlock, 'isSecondary:', isSecondary);
+    
+    // Create a new clip object using currentClipId
+    const clip = {
+        id: currentClipId,
+        text: selectedText,
+        timestamp: new Date().toISOString(),
+        range: getRangeInfo(selection.getRangeAt(0)),
+        url: window.location.href,
+        isCode: isCodeBlock,
+        isSecondary: isSecondary
+    };
+    
+    // Add to clips array
+    clips.push(clip);
+    
+    // Increment currentClipId
+    currentClipId = clips.length;
+    
+    // Update the master object
+    allClips[currentConversationId].clips = clips;
+    allClips[currentConversationId].lastUpdated = new Date().toISOString();
+    
+    // Save to Chrome storage
+    chrome.storage.local.set({ 'claudeNotesV2': allClips }, () => {
+        console.log('Claude Notes: Clip saved to conversation', currentConversationId);
+    });
+    
+    // Highlight the selected text
+    highlightText(selection.getRangeAt(0), clip.id, isCodeBlock, isSecondary);
+    
+    // Update the modal content
+    updateModalContent();
+    
+    // Show the modal
+    noteModal.style.display = 'flex';
 }
 
 // Get information about a range that can be stored
@@ -734,24 +877,220 @@ function hashString(str) {
   return hash.toString();
 }
 
-// Highlight selected text in the DOM
+// Handle heading element highlighting
+function handleHeadingHighlight(range, clipId, isSecondary) {
+  try {
+    const heading = range.commonAncestorContainer.closest('h1, h2, h3, h4, h5, h6');
+    if (!heading) return false;
+
+    // Create wrapper span
+    const textWrapper = document.createElement('span');
+    textWrapper.className = 'claude-notes-text-wrapper';
+    textWrapper.dataset.clipId = clipId;
+    textWrapper.dataset.originalClasses = heading.getAttribute('class');
+    textWrapper.dataset.isHeadingClip = 'true';
+    
+    // Create superscript
+    const superscript = document.createElement('sup');
+    superscript.textContent = clipId + 1;
+    superscript.style.color = isSecondary ? '#444' : '#c96442';
+    superscript.style.verticalAlign = 'baseline';
+    superscript.style.marginRight = '4px';
+    superscript.style.fontWeight = 'bold';
+    
+    // Preserve heading styles while adding highlight
+    textWrapper.style.textDecoration = 'underline';
+    textWrapper.style.textDecorationColor = isSecondary ? '#444' : '#c96442';
+    textWrapper.style.textDecorationThickness = '1px';
+    textWrapper.style.display = 'inline';
+    
+    // Move content to wrapper
+    const content = range.extractContents();
+    textWrapper.appendChild(content);
+    
+    // Insert superscript and wrapper
+    range.insertNode(textWrapper);
+    textWrapper.parentNode.insertBefore(superscript, textWrapper);
+    
+    return true;
+  } catch (e) {
+    console.error('Error in heading highlight:', e);
+    return false;
+  }
+}
+
+// Helper function to handle list item highlighting
+function handleListHighlight(range, clipId, isSecondary) {
+  try {
+    // Find the list container
+    let listContainer = range.commonAncestorContainer;
+    while (listContainer && !['UL', 'OL'].includes(listContainer.nodeName)) {
+      listContainer = listContainer.parentNode;
+    }
+    
+    if (!listContainer) return false;
+    
+    // Get selected list items
+    const listItems = Array.from(listContainer.getElementsByTagName('LI'));
+    const selectedItems = listItems.filter(li => {
+      const itemRange = document.createRange();
+      itemRange.selectNodeContents(li);
+      return range.intersectsNode(li);
+    });
+    
+    if (selectedItems.length === 0) return false;
+    
+    // Create a highlight wrapper for the entire selection
+    const highlightWrapper = document.createElement('span');
+    highlightWrapper.className = 'claude-notes-highlight';
+    if (isSecondary) highlightWrapper.classList.add('secondary');
+    highlightWrapper.dataset.clipId = clipId;
+    highlightWrapper.dataset.isListClip = 'true';
+    
+    // Only add superscript to the first item
+    const firstItem = selectedItems[0];
+    const superscript = document.createElement('sup');
+    superscript.textContent = clipId + 1;
+    superscript.style.color = isSecondary ? '#444' : '#c96442';
+    superscript.style.verticalAlign = 'baseline';
+    superscript.style.marginRight = '4px';
+    superscript.style.fontWeight = 'bold';
+    
+    // Insert superscript at the start of the text content
+    const textNode = Array.from(firstItem.childNodes).find(node => 
+      node.nodeType === Node.TEXT_NODE && node.textContent.trim()
+    );
+    if (textNode) {
+      firstItem.insertBefore(superscript, textNode);
+    } else {
+      firstItem.appendChild(superscript);
+    }
+    
+    // Apply styling to all selected items
+    selectedItems.forEach((item, index) => {
+      // Store original classes and attributes
+      const originalClasses = item.getAttribute('class');
+      const originalIndex = item.getAttribute('index');
+      const originalDepth = item.closest('ul, ol').getAttribute('depth');
+      
+      // Create or get the text wrapper span
+      let textWrapper = item.querySelector('.claude-notes-text-wrapper');
+      if (!textWrapper) {
+        textWrapper = document.createElement('span');
+        textWrapper.className = 'claude-notes-text-wrapper claude-notes-list-item';
+        
+        // Store original attributes
+        textWrapper.dataset.originalClasses = originalClasses;
+        textWrapper.dataset.originalIndex = originalIndex;
+        textWrapper.dataset.originalDepth = originalDepth;
+        textWrapper.dataset.clipId = clipId;
+        
+        // Move all text nodes into the wrapper
+        Array.from(item.childNodes).forEach(node => {
+          if (node !== superscript && (node.nodeType === Node.TEXT_NODE || node.nodeName !== 'SUP')) {
+            textWrapper.appendChild(node.cloneNode(true));
+          }
+        });
+        
+        // Clear original text nodes
+        Array.from(item.childNodes).forEach(node => {
+          if (node !== superscript && (node.nodeType === Node.TEXT_NODE || node.nodeName !== 'SUP')) {
+            item.removeChild(node);
+          }
+        });
+        
+        item.appendChild(textWrapper);
+      }
+      
+      // Apply persistent styles while preserving Claude's structure
+      textWrapper.style.textDecoration = 'underline';
+      textWrapper.style.textDecorationColor = isSecondary ? '#444' : '#c96442';
+      textWrapper.style.textDecorationThickness = '1px';
+      textWrapper.style.display = 'inline';
+      
+      // Preserve list item styles from Claude
+      item.style.display = 'list-item';
+      item.style.whiteSpace = 'normal';
+      item.style.breakWords = 'break-words';
+      
+      // Store original list style and additional info for ordered lists
+      const computedStyle = window.getComputedStyle(item);
+      textWrapper.dataset.originalListStyle = computedStyle.listStyleType;
+      
+      // For ordered lists, store the original number
+      if (listContainer.nodeName === 'OL') {
+        // Find the item's position in the original list
+        const itemIndex = Array.from(listContainer.children).indexOf(item);
+        const startAttr = listContainer.getAttribute('start');
+        const startNum = startAttr ? parseInt(startAttr) : 1;
+        const originalNumber = startNum + itemIndex;
+        textWrapper.dataset.originalNumber = originalNumber;
+        
+        // Store list style properties
+        textWrapper.dataset.isOrdered = 'true';
+        if (startAttr) textWrapper.dataset.listStart = startAttr;
+        if (listContainer.getAttribute('reversed')) {
+          textWrapper.dataset.listReversed = 'true';
+        }
+        
+        // For ordered lists, explicitly set the counter
+        item.style.setProperty('counter-reset', `list-item ${originalNumber - 1}`);
+        item.style.listStyle = textWrapper.dataset.originalListStyle;
+      } else {
+        item.style.listStyle = textWrapper.dataset.originalListStyle || 'disc';
+      }
+      
+      // Preserve Claude's list spacing
+      const listParent = item.closest('ul, ol');
+      if (listParent) {
+        listParent.style.paddingLeft = '28px'; // Claude's default
+        if (listParent.classList.contains('[&:not(:last-child)_ul]:pb-1')) {
+          listParent.style.paddingBottom = '0.25rem';
+        }
+      }
+    });
+    
+    return true;
+  } catch (e) {
+    console.error('Error in list highlight:', e);
+    return false;
+  }
+}
+
+// Modify the highlightText function to handle lists specially
 function highlightText(range, clipId, isCodeBlock, isSecondary) {
   try {
-    // Check if we're in the modal - if so, don't apply highlights
+    // Check if we're in the modal
     const modal = document.getElementById('claude-notes-modal');
     if (modal && modal.contains(range.commonAncestorContainer)) {
-      console.log('Skipping highlight in modal content');
       return false;
     }
 
+    // Check if we're dealing with a heading
+    const headingElements = ['H1', 'H2', 'H3', 'H4', 'H5', 'H6'];
+    let headingContainer = range.commonAncestorContainer;
+    while (headingContainer && !headingElements.includes(headingContainer.nodeName)) {
+      headingContainer = headingContainer.parentNode;
+    }
+    
+    if (headingContainer && !isCodeBlock) {
+      return handleHeadingHighlight(range, clipId, isSecondary);
+    }
+
+    // Check if we're dealing with a list
+    let listContainer = range.commonAncestorContainer;
+    while (listContainer && !['UL', 'OL'].includes(listContainer.nodeName)) {
+      listContainer = listContainer.parentNode;
+    }
+    
+    if (listContainer && !isCodeBlock) {
+      return handleListHighlight(range, clipId, isSecondary);
+    }
+
+    // Continue with existing highlight logic for non-list elements
     // Check if the selection crosses multiple node boundaries
     const startContainer = range.startContainer;
     const endContainer = range.endContainer;
-    
-    console.log('Highlighting range:', range.toString());
-    console.log('Start container:', startContainer.nodeType, startContainer.nodeName);
-    console.log('End container:', endContainer.nodeType, endContainer.nodeName);
-    console.log('Is code block:', isCodeBlock, 'Is secondary:', isSecondary);
     
     // Simple case: selection is within a single text node
     if (startContainer === endContainer && startContainer.nodeType === Node.TEXT_NODE) {
@@ -780,7 +1119,6 @@ function highlightText(range, clipId, isCodeBlock, isSecondary) {
         highlightSpan.prepend(superscript);
         return true;
       } catch (nodeError) {
-        console.error('Error in simple highlight case:', nodeError);
         // Fall through to complex case if this fails
       }
     }
@@ -823,7 +1161,6 @@ function highlightText(range, clipId, isCodeBlock, isSecondary) {
       range.insertNode(highlightSpan);
       return true;
     } catch (complexError) {
-      console.error('Error in complex highlight case:', complexError);
       // Fall through to fallback method
     }
     
@@ -927,79 +1264,86 @@ function applyHighlights(retryCount = 0, maxRetries = 5) {
     
     let found = false;
     
-    // Log if this is a code clip
-    if (clip.isCode) {
-      console.log('Attempting to highlight code clip:', clip.id);
-    }
-    
-    // First try exact fingerprint match
-    for (const container of potentialContainers) {
-      try {
-        const containerFingerprint = hashString(container.textContent);
+    // Check if this is a list clip
+    const existingListHighlight = document.querySelector(`.claude-notes-highlight[data-clip-id="${clip.id}"][data-is-list-clip="true"]`);
+    if (existingListHighlight) {
+      // Restore list item styling
+      const listItems = document.querySelectorAll(`.claude-notes-list-item[data-clip-id="${clip.id}"]`);
+      listItems.forEach(item => {
+        // Restore text decoration
+        item.style.textDecoration = 'underline';
+        item.style.textDecorationColor = clip.isSecondary ? '#444' : '#c96442';
+        item.style.textDecorationThickness = '1px';
+        item.style.display = 'inline';
         
-        if (containerFingerprint === clip.range.containerFingerprint) {
-          console.log('Found exact container match for clip:', clip.id);
-          highlightTextInContainer(container, clip);
-          found = true;
-          highlightedCount++;
-          break;
-        }
-      } catch (e) {
-        console.error('Error checking container:', e);
-      }
-    }
-    
-    // If no exact match, try fuzzy text search
-    if (!found) {
-      console.log('No exact match found, trying fuzzy search for clip:', clip.id);
-      
-      // Try to find containers that contain the clip text
-      for (const container of potentialContainers) {
-        try {
-          if (container.textContent.includes(clip.text)) {
-            console.log('Found container with clip text');
+        // Restore original classes and attributes
+        const listItemParent = item.closest('li');
+        if (listItemParent) {
+          if (item.dataset.originalClasses) {
+            listItemParent.className = item.dataset.originalClasses;
+          }
+          if (item.dataset.originalIndex) {
+            listItemParent.setAttribute('index', item.dataset.originalIndex);
+          }
+          
+          listItemParent.style.display = 'list-item';
+          listItemParent.style.whiteSpace = 'normal';
+          listItemParent.style.breakWords = 'break-words';
+          
+          // Handle ordered lists specially
+          if (item.dataset.isOrdered === 'true') {
+            const originalNumber = parseInt(item.dataset.originalNumber);
+            listItemParent.style.setProperty('counter-reset', `list-item ${originalNumber - 1}`);
             
-            // For code blocks, check if this container has the right classes
-            if (clip.isCode) {
-              let isCodeContainer = false;
-              // Check if this container or any of its ancestors is a code block
-              let node = container;
-              while (node && node !== document.body) {
-                if (node.classList && 
-                    node.classList.contains('prismjs') && 
-                    node.classList.contains('code-block__code')) {
-                  isCodeContainer = true;
-                  console.log('Found code block container for code clip');
-                  break;
-                }
-                node = node.parentNode;
+            // Restore any special list attributes
+            const parentList = listItemParent.closest('ol');
+            if (parentList) {
+              if (item.dataset.listStart) {
+                parentList.setAttribute('start', item.dataset.listStart);
+              }
+              if (item.dataset.listReversed) {
+                parentList.setAttribute('reversed', '');
               }
               
-              // If this is a code clip but container is not a code block, skip it
-              if (!isCodeContainer) {
-                console.log('Container is not a code block, skipping for code clip');
-                continue;
+              // Restore list spacing
+              parentList.style.paddingLeft = '28px';
+              if (parentList.classList.contains('[&:not(:last-child)_ul]:pb-1')) {
+                parentList.style.paddingBottom = '0.25rem';
               }
             }
-            
-            // Create a range for this text
-            const range = findTextInContainer(container, clip.text);
-            if (range) {
-              highlightText(range, clip.id, clip.isCode, clip.isSecondary);
-              found = true;
-              highlightedCount++;
-              break;
-            }
           }
-        } catch (e) {
-          console.error('Error in fuzzy search:', e);
+          
+          listItemParent.style.listStyle = item.dataset.originalListStyle || 'disc';
         }
-      }
+      });
+      found = true;
+      highlightedCount++;
     }
     
-    if (!found) {
-      console.log('Could not find a match for clip:', clip.id, 'isCode:', clip.isCode);
+    // Check if this is a heading clip
+    const existingHeadingHighlight = document.querySelector(`.claude-notes-text-wrapper[data-clip-id="${clip.id}"][data-is-heading-clip="true"]`);
+    if (existingHeadingHighlight) {
+      // Restore heading styling
+      existingHeadingHighlight.style.textDecoration = 'underline';
+      existingHeadingHighlight.style.textDecorationColor = clip.isSecondary ? '#444' : '#c96442';
+      existingHeadingHighlight.style.textDecorationThickness = '1px';
+      existingHeadingHighlight.style.display = 'inline';
+      
+      // Restore original heading classes
+      const originalClasses = existingHeadingHighlight.dataset.originalClasses;
+      if (originalClasses) {
+        const headingParent = existingHeadingHighlight.closest('h1, h2, h3, h4, h5, h6');
+        if (headingParent) {
+          headingParent.className = originalClasses;
+        }
+      }
+      
+      found = true;
+      highlightedCount++;
     }
+
+    // Continue with existing code for other types of clips...
+    // ... existing code ...
   });
   
   console.log(`Successfully highlighted ${highlightedCount} out of ${clips.length} clips`);
@@ -1237,7 +1581,9 @@ function updateModalContent() {
     emptyMessage.textContent = activeTab === 'clips' 
       ? 'No clips saved in this conversation yet. Select text and click "Clip" to save.'
       : 'No annotations saved in this conversation yet. Select text and click "Annotate" to save.';
-    emptyMessage.style.color = '#666';
+    applyStyles(emptyMessage, {
+      color: styles.colors.text.normal
+    });
     modalContent.appendChild(emptyMessage);
     return;
   }
@@ -1252,7 +1598,9 @@ function updateModalContent() {
     emptyMessage.textContent = activeTab === 'clips' 
       ? 'No clips saved yet. Select text and click "Clip" to save.'
       : 'No annotations saved yet. Select text and click "Annotate" to save.';
-    emptyMessage.style.color = '#666';
+    applyStyles(emptyMessage, {
+      color: styles.colors.text.normal
+    });
     modalContent.appendChild(emptyMessage);
     return;
   }
@@ -1263,98 +1611,56 @@ function updateModalContent() {
   sortedClips.forEach(clip => {
     const clipElement = document.createElement('div');
     clipElement.className = 'claude-notes-clip';
-    clipElement.style.padding = '10px';
-    clipElement.style.marginBottom = '10px';
-    clipElement.style.border = '1px solid #eee';
-    clipElement.style.borderRadius = '4px';
-    clipElement.style.position = 'relative';
-    clipElement.style.display = 'flex';
-    clipElement.style.flexDirection = 'column';
-    clipElement.style.gap = '8px';
+    applyStyles(clipElement, createStyleObject(baseStyles.clip, {
+      cursor: 'pointer'  // Add pointer cursor to indicate clickability
+    }));
     
+    // Add click handler to the clip element
+    clipElement.addEventListener('click', (e) => {
+      // Don't trigger if clicking the delete button
+      if (e.target.closest('button')) return;
+      scrollToClip(clip.id);
+    });
+
     const clipNumber = document.createElement('div');
     clipNumber.textContent = clip.id + 1;
-    clipNumber.style.color = clip.isSecondary ? '#444' : '#c96442';
-    clipNumber.style.fontSize = '14px';
-    clipNumber.style.fontWeight = 'bold';
+    applyStyles(clipNumber, createStyleObject(baseStyles.clipNumber, {
+      color: clip.isSecondary ? styles.colors.text.normal : styles.colors.primary
+    }));
     
     const clipContent = document.createElement('div');
-    clipContent.style.flex = '1';
-    clipContent.style.minWidth = '0';
+    applyStyles(clipContent, baseStyles.clipContent);
     
     const clipText = document.createElement(clip.isCode ? 'code' : 'p');
     clipText.textContent = clip.text;
-    clipText.style.margin = '0';
-    clipText.style.fontSize = '0.875rem';
-    clipText.style.width = '100%';
-    clipText.style.overflowX = 'hidden';
-    clipText.style.textOverflow = 'ellipsis';
     
-    if (clip.isSecondary && !clip.isCode) {
-      clipText.style.fontStyle = 'italic'; // Make annotations italic instead of bold
-    }
-    
+    // Apply appropriate styles based on clip type
     if (clip.isCode) {
-      clipText.className = 'code-block';
+      applyStyles(clipText, baseStyles.codeClip);
+    } else {
+      applyStyles(clipText, createStyleObject(
+        baseStyles.clipText,
+        clip.isSecondary ? baseStyles.clipTextSecondary : {}
+      ));
     }
     
     const deleteButton = document.createElement('button');
-    deleteButton.textContent = '×';
-    deleteButton.style.position = 'absolute';
-    deleteButton.style.top = '8px';
-    deleteButton.style.right = '8px';
-    deleteButton.style.background = 'none';
-    deleteButton.style.border = 'none';
-    deleteButton.style.color = '#666';
-    deleteButton.style.fontSize = '1.25rem';
-    deleteButton.style.cursor = 'pointer';
-    deleteButton.style.padding = '0 5px';
+    applyStyles(deleteButton, createStyleObject(baseStyles.deleteButton, {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }));
+    deleteButton.appendChild(ClaudeIcons.createIcon('x', 16, styles.colors.text.normal));
     deleteButton.addEventListener('click', () => {
       deleteClip(clip.id);
     });
     
     clipContent.appendChild(clipText);
-    
     clipElement.appendChild(clipNumber);
     clipElement.appendChild(clipContent);
     clipElement.appendChild(deleteButton);
-    
     modalContent.appendChild(clipElement);
   });
-}
-
-// Delete a specific clip
-function deleteClip(clipId) {
-  // Remove highlight from DOM
-  const highlight = document.querySelector(`.claude-notes-highlight[data-clip-id="${clipId}"]`);
-  if (highlight) {
-    const parent = highlight.parentNode;
-    
-    // First remove all superscript elements
-    const sups = highlight.querySelectorAll('sup');
-    sups.forEach(sup => sup.remove());
-    
-    // Move remaining text content back to parent
-    while (highlight.firstChild) {
-      parent.insertBefore(highlight.firstChild, highlight);
-    }
-    parent.removeChild(highlight);
-  }
-  
-  // Remove from clips array
-  clips = clips.filter(clip => clip.id !== clipId);
-  
-  // Update the master object
-  allClips[currentConversationId].clips = clips;
-  allClips[currentConversationId].lastUpdated = new Date().toISOString();
-  
-  // Update storage
-  chrome.storage.local.set({ 'claudeNotesV2': allClips }, () => {
-    console.log('Claude Notes: Clip deleted from conversation', currentConversationId);
-  });
-  
-  // Update modal
-  updateModalContent();
 }
 
 // Clear all clips from current conversation
@@ -1593,4 +1899,26 @@ function ensureModalWithinBounds() {
     noteModal.style.left = `${windowWidth - noteModal.offsetWidth - minDistanceFromEdge}px`;
     noteModal.style.right = 'auto';
   }
+}
+
+// Add this new function to handle scrolling to a clip
+function scrollToClip(clipId) {
+  const highlight = document.querySelector(`.claude-notes-highlight[data-clip-id="${clipId}"]`);
+  if (!highlight) {
+    console.log('Could not find highlight for clip:', clipId);
+    return;
+  }
+
+  // Scroll the highlight into view with some padding
+  highlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  
+  // Optional: Add a brief highlight animation
+  highlight.style.transition = 'background-color 0.5s';
+  highlight.style.backgroundColor = 'rgba(201, 100, 66, 0.2)';  // Using the primary color
+  
+  // Remove the highlight after animation
+  setTimeout(() => {
+    highlight.style.backgroundColor = '';
+    highlight.style.transition = '';
+  }, 1500);
 } 

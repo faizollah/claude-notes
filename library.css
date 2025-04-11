@@ -281,10 +281,10 @@ footer {
   color: #d4d4d4;
   padding: 12px;
   border-radius: 4px;
-  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
-  white-space: nowrap;
-  overflow-x: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
+  font-family: "Fira Code", "Menlo", "Monaco", "Courier New", monospace;
+  white-space: pre;
+  overflow-x: auto;
   font-size: 13px;
+  max-height: 300px;
+  overflow-y: auto;
 } 
