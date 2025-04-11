@@ -7,6 +7,7 @@ let currentConversationId = '';
 let conversationTitle = '';
 let needsUpdate = false;
 let lastUrl = ''; // Track URL for SPA navigation detection
+let activeTab = 'clips'; // Track active tab
 
 // Initialize extension
 function init() {
@@ -258,6 +259,19 @@ function createModal() {
   
   modalHeader.appendChild(modalTitle);
   modalHeader.appendChild(closeButton);
+
+  // Create tab container
+  const tabContainer = document.createElement('div');
+  tabContainer.style.display = 'flex';
+  tabContainer.style.borderBottom = '1px solid #ddd';
+  tabContainer.style.backgroundColor = '#f5f5f5';
+
+  // Create tabs
+  const clipsTab = createTabButton('Clips', 'clips');
+  const annotationsTab = createTabButton('Annotations', 'annotations');
+  
+  tabContainer.appendChild(clipsTab);
+  tabContainer.appendChild(annotationsTab);
   
   // Create modal content
   const modalContent = document.createElement('div');
@@ -304,6 +318,7 @@ function createModal() {
   
   // Assemble modal
   noteModal.appendChild(modalHeader);
+  noteModal.appendChild(tabContainer);
   noteModal.appendChild(modalContent);
   noteModal.appendChild(modalActions);
   
@@ -312,6 +327,45 @@ function createModal() {
   
   // Make modal draggable
   makeDraggable(noteModal, modalHeader);
+}
+
+// Create a tab button
+function createTabButton(text, tabId) {
+  const tab = document.createElement('button');
+  tab.textContent = text;
+  tab.style.padding = '8px 16px';
+  tab.style.border = 'none';
+  tab.style.borderBottom = '2px solid transparent';
+  tab.style.backgroundColor = 'transparent';
+  tab.style.cursor = 'pointer';
+  tab.style.flex = '1';
+  tab.style.fontSize = '14px';
+  tab.style.fontWeight = activeTab === tabId ? 'bold' : 'normal';
+  tab.style.borderBottom = activeTab === tabId ? '2px solid #c96442' : '2px solid transparent';
+  
+  tab.addEventListener('click', () => switchTab(tabId));
+  
+  return tab;
+}
+
+// Switch between tabs
+function switchTab(tabId) {
+  activeTab = tabId;
+  
+  // Update tab styles
+  const tabs = noteModal.querySelectorAll('button');
+  tabs.forEach(tab => {
+    if (tab.textContent === (tabId === 'clips' ? 'Clips' : 'Annotations')) {
+      tab.style.fontWeight = 'bold';
+      tab.style.borderBottom = '2px solid #c96442';
+    } else {
+      tab.style.fontWeight = 'normal';
+      tab.style.borderBottom = '2px solid transparent';
+    }
+  });
+  
+  // Update content
+  updateModalContent();
 }
 
 // Make an element draggable
@@ -549,7 +603,7 @@ function createClipButton(selection, isCodeBlock) {
   // Secondary clip button
   const secondClipButton = document.createElement('button');
   secondClipButton.id = 'claude-notes-second-clip-button';
-  secondClipButton.textContent = 'Second action';
+  secondClipButton.textContent = 'Annotate';
   secondClipButton.style.padding = '5px 10px';
   secondClipButton.style.backgroundColor = '#444';
   secondClipButton.style.color = 'white';
@@ -1178,23 +1232,34 @@ function updateModalContent() {
   const modalContent = document.getElementById('claude-notes-content');
   modalContent.innerHTML = '';
   
-  // Set the modal title to be static
-  const modalTitle = document.getElementById('claude-notes-title');
-  if (modalTitle) {
-    modalTitle.textContent = 'Claude Notes';
-  }
-  
   if (clips.length === 0) {
     const emptyMessage = document.createElement('p');
-    emptyMessage.textContent = 'No clips saved in this conversation yet. Select text and click "Clip" to save.';
+    emptyMessage.textContent = activeTab === 'clips' 
+      ? 'No clips saved in this conversation yet. Select text and click "Clip" to save.'
+      : 'No annotations saved in this conversation yet. Select text and click "Annotate" to save.';
     emptyMessage.style.color = '#666';
     modalContent.appendChild(emptyMessage);
     return;
   }
   
-  // Create clips list
+  // Filter clips based on active tab
+  const filteredClips = clips.filter(clip => 
+    activeTab === 'clips' ? !clip.isSecondary : clip.isSecondary
+  );
+  
+  if (filteredClips.length === 0) {
+    const emptyMessage = document.createElement('p');
+    emptyMessage.textContent = activeTab === 'clips' 
+      ? 'No clips saved yet. Select text and click "Clip" to save.'
+      : 'No annotations saved yet. Select text and click "Annotate" to save.';
+    emptyMessage.style.color = '#666';
+    modalContent.appendChild(emptyMessage);
+    return;
+  }
+  
   // Sort clips in descending order (newest first)
-  const sortedClips = [...clips].reverse();
+  const sortedClips = [...filteredClips].reverse();
+  
   sortedClips.forEach(clip => {
     const clipElement = document.createElement('div');
     clipElement.className = 'claude-notes-clip';
@@ -1204,7 +1269,7 @@ function updateModalContent() {
     clipElement.style.borderRadius = '4px';
     clipElement.style.position = 'relative';
     clipElement.style.display = 'flex';
-    clipElement.style.flexDirection = 'column'; // Make it vertical
+    clipElement.style.flexDirection = 'column';
     clipElement.style.gap = '8px';
     
     const clipNumber = document.createElement('div');
@@ -1226,7 +1291,7 @@ function updateModalContent() {
     clipText.style.textOverflow = 'ellipsis';
     
     if (clip.isSecondary && !clip.isCode) {
-      clipText.style.fontWeight = 'bold';
+      clipText.style.fontStyle = 'italic'; // Make annotations italic instead of bold
     }
     
     if (clip.isCode) {
