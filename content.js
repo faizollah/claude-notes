@@ -448,80 +448,96 @@ function setupUrlChangeMonitoring() {
 // Check if URL has changed and handle conversation changes
 function checkUrlChange() {
   const currentUrl = window.location.href;
-  
+  const previousUrl = lastUrl; // Store previous URL for comparison
+
   // If URL hasn't changed, do nothing
-  if (currentUrl === lastUrl) return;
-  
-  console.log('URL changed:', lastUrl, '->', currentUrl);
-  lastUrl = currentUrl;
-  
+  if (currentUrl === previousUrl) return;
+
+  console.log('URL changed:', previousUrl, '->', currentUrl);
+  lastUrl = currentUrl; // Update lastUrl immediately
+
   // Get new conversation ID
   const newConversationId = extractConversationId();
-  
-  // If we can't extract a conversation ID, retry after a short delay
-  // This handles cases where the URL changes but the DOM hasn't fully updated
+
+  // Handle case where URL changes but ID extraction might be delayed
   if (newConversationId === 'default' && currentUrl.includes('claude.ai/chat/')) {
     console.log('URL indicates a conversation but couldn\'t extract ID, will retry');
-    setTimeout(checkUrlChange, 500);
+    setTimeout(checkUrlChange, 500); // Retry after delay
     return;
   }
-  
-  // Handle case where we've navigated away from a conversation to a page without a conversation ID
+
+  // Handle navigation AWAY from a conversation
   if (newConversationId === 'default') {
     console.log('Navigated to a page without a conversation ID, hiding extension UI');
     currentConversationId = newConversationId;
-    
+
     // Hide modal if it exists
     if (noteModal && noteModal.style.display !== 'none') {
       noteModal.style.display = 'none';
     }
-    
-    // Remove selection listener to prevent showing the clip button
+
+    // Remove selection listener
     document.removeEventListener('mouseup', handleTextSelection);
-    
-    // Clear highlights from previous page
+
+    // Clear highlights
     clearAllHighlights();
-    
+
+    // Remove the button if it exists
+    const notesButton = document.getElementById('claude-notes-action-button');
+    if (notesButton) {
+        notesButton.remove();
+        console.log('Removed Notes button as we navigated away from a chat.');
+    }
+
     return;
   }
-  
-  // If conversation ID has changed, update everything
+
+  // --- Key Change: Ensure button injection happens on valid navigation ---
+  // Whether the conversation ID changed or just the URL (indicating potential DOM update),
+  // ensure the button is present.
+  console.log('Valid conversation context detected, ensuring header button exists...');
+  injectHeaderButton(); // Call injection function - it has internal checks
+
+  // Handle conversation *data* change only if ID is different
   if (newConversationId !== currentConversationId) {
     console.log('Conversation changed:', currentConversationId, '->', newConversationId);
     currentConversationId = newConversationId;
-    
+
     // Update conversation title (with retry for SPA transitions)
     const updateTitle = () => {
       conversationTitle = document.title.replace(' - Claude', '').trim();
-      
-      // If title seems incomplete, retry after a short delay
-      // This handles SPA transitions where title updates might lag
+
       if (conversationTitle === 'Claude' || conversationTitle === '') {
         console.log('Title not yet updated, will retry');
         setTimeout(updateTitle, 300);
         return;
       }
-      
+
       console.log('New conversation title:', conversationTitle);
-      
+
       // Add selection listener if it was removed
-      document.removeEventListener('mouseup', handleTextSelection); // Remove first to prevent duplicates
+      document.removeEventListener('mouseup', handleTextSelection);
       document.addEventListener('mouseup', handleTextSelection);
-      
+
       // Reload clips for the new conversation
-      loadClips();
-      
+      loadClips(); // This will eventually call applyHighlights via waitForClaudeContent
+
       // Update modal content if it's visible
       if (noteModal && noteModal.style.display !== 'none') {
         updateModalContent();
       }
-      
-      // Clear old highlights - don't apply new ones yet, loadClips will handle that
+
+      // Clear old highlights before loading new ones
       clearAllHighlights();
     };
-    
-    // Start the title update process
-    updateTitle();
+
+    updateTitle(); // Start the title update process
+  } else {
+      console.log('URL changed, but conversation ID remains the same. Button re-checked.');
+      // Optional: Maybe trigger a light refresh or highlight check even if ID is the same?
+      // For now, ensuring the button exists is the main goal.
+      // We might need to re-apply highlights if the content area also re-rendered.
+      waitForClaudeContent(); // Re-check content and apply highlights if needed
   }
 }
 
