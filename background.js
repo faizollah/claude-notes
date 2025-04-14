@@ -83,9 +83,40 @@ function showNotification(title, message) {
 
 // Listen for messages from other parts of the extension
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('Background received message:', message);
+  console.log('Background received message:', message, 'from:', sender);
   
-  if (message.action === 'saveClip') {
+  // Handle toggle request coming *from* the content script (e.g., injected button)
+  if (message.action === 'toggleModal') {
+    // Ensure the message is from a content script in a tab
+    if (sender.tab) {
+      const tabId = sender.tab.id;
+      console.log(`Forwarding toggleModal request to tab ${tabId}`);
+      // Send the message back to the specific content script to perform the toggle
+      chrome.tabs.sendMessage(
+        tabId,
+        { action: 'toggleModal' }, // Send the same action back
+        (response) => {
+          if (chrome.runtime.lastError) {
+            console.error('Error sending toggleModal back to content script:', chrome.runtime.lastError.message);
+            // We might not be able to show notification if tab context is weird
+            // showNotification('Error', 'Could not toggle notes panel.');
+            sendResponse({ success: false, error: chrome.runtime.lastError.message });
+          } else if (response && !response.success) {
+            console.log('Content script failed to toggle modal:', response.error);
+            showNotification('Claude Notes', response.error || 'Could not toggle notes panel.');
+            sendResponse({ success: false, error: response.error });
+          } else {
+            console.log('Modal toggle initiated by content script successful.');
+            sendResponse({ success: true });
+          }
+        }
+      );
+      return true; // Indicate async response
+    } else {
+      console.error('toggleModal message received without sender tab info.');
+      sendResponse({ success: false, error: 'Internal error: Sender tab not found.' });
+    }
+  } else if (message.action === 'saveClip') {
     // Forward the clip to any open Claude.ai tabs
     chrome.tabs.query({url: 'https://claude.ai/*'}, (tabs) => {
       tabs.forEach(tab => {

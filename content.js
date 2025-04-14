@@ -1,3 +1,5 @@
+console.log('Claude Notes: content.js script loaded.');
+
 // Style utility functions
 const styles = {
   colors: {
@@ -20,20 +22,106 @@ const styles = {
   }
 };
 
+// Inject highlight styles
+const injectHighlightStyles = () => {
+  const styleSheet = document.createElement("style");
+  styleSheet.id = 'claude-notes-styles';
+  styleSheet.textContent = `
+    .claude-notes-highlight {
+      text-decoration: underline !important;
+      text-decoration-color: ${styles.colors.primary} !important;
+      text-decoration-thickness: 1px !important;
+      position: relative !important;
+      display: inline !important;
+    }
+    
+    .claude-notes-highlight.secondary {
+      text-decoration-color: ${styles.colors.text.normal} !important;
+    }
+    
+    .claude-notes-highlight > sup,
+    .claude-notes-text-wrapper + sup {
+      color: ${styles.colors.primary};
+      font-weight: bold;
+      vertical-align: baseline;
+      margin-right: 4px;
+      font-size: 0.7em;
+      user-select: none;
+    }
+    
+    .claude-notes-highlight.secondary > sup,
+    .claude-notes-text-wrapper.secondary + sup {
+      color: ${styles.colors.text.normal};
+    }
+    
+    /* Element-specific styles */
+    .claude-notes-highlight[data-element-type="p"] {
+      white-space: pre-wrap !important;
+    }
+    
+    .claude-notes-highlight[data-element-type="li"] {
+      white-space: normal !important;
+      display: inline !important;
+      list-style: inherit !important;
+    }
+    
+    .claude-notes-highlight[data-element-type^="h"] {
+      font-weight: inherit !important;
+      font-size: inherit !important;
+      margin: inherit !important;
+      display: inline !important;
+    }
+    
+    /* Preserve list structure */
+    li > .claude-notes-highlight[data-element-type="li"] {
+      display: inline !important;
+      white-space: normal !important;
+      word-break: break-word !important;
+    }
+    
+    /* Preserve heading structure */
+    h1 > .claude-notes-highlight[data-element-type="h1"],
+    h2 > .claude-notes-highlight[data-element-type="h2"],
+    h3 > .claude-notes-highlight[data-element-type="h3"],
+    h4 > .claude-notes-highlight[data-element-type="h4"],
+    h5 > .claude-notes-highlight[data-element-type="h5"],
+    h6 > .claude-notes-highlight[data-element-type="h6"] {
+      display: inline !important;
+      font-weight: inherit !important;
+      font-size: inherit !important;
+    }
+  `;
+  
+  // Remove existing stylesheet if present
+  const existingStyle = document.getElementById('claude-notes-styles');
+  if (existingStyle) {
+    existingStyle.remove();
+  }
+  
+  document.head.appendChild(styleSheet);
+};
+
 const createStyleObject = (...objects) => Object.assign({}, ...objects);
 
 const baseStyles = {
   modal: {
     position: 'fixed',
-    display: 'flex',
-    flexDirection: 'column',
+    top: '20px',
+    right: '20px',
+    width: '350px',
+    maxHeight: 'calc(100vh - 40px)',
     backgroundColor: styles.colors.background.white,
-    border: `1px solid #ccc`,
+    border: `1px solid ${styles.colors.border}`,
     borderRadius: '8px',
-    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
     zIndex: '10000',
+    display: 'none', // Initially hidden
+    flexDirection: 'column',
     overflow: 'hidden',
-    fontFamily: 'Arial, sans-serif'
+    // Update font family here
+    fontFamily: '\'Lato\', Arial, sans-serif', 
+    fontSize: '14px',
+    color: styles.colors.text.dark
   },
   header: {
     padding: styles.spacing.md,
@@ -115,15 +203,17 @@ const baseStyles = {
   },
   codeClip: {
     display: 'block',
-    backgroundColor: '#1e1e1e',
-    color: '#d4d4d4',
-    padding: '12px',
+    backgroundColor: '#1e1e1e', // Dark background for code
+    color: '#d4d4d4', // Light text for code
+    padding: styles.spacing.sm,
     borderRadius: '4px',
-    fontFamily: '"Fira Code", "Menlo", "Monaco", "Courier New", monospace',
-    whiteSpace: 'pre',
-    overflowX: 'auto',
-    fontSize: '13px',
-    maxHeight: '300px',
+    // Keep specific monospace font for code blocks
+    fontFamily: '"Fira Code", "Menlo", "Monaco", "Courier New", monospace', 
+    whiteSpace: 'pre', // Changed from pre-wrap to pre
+    overflowX: 'auto', // Keep this for horizontal scroll
+    fontSize: '0.85em', // Slightly smaller font for code
+    lineHeight: '1.4',
+    maxHeight: '150px',
     overflowY: 'auto'
   },
   deleteButton: {
@@ -152,6 +242,8 @@ let conversationTitle = '';
 let needsUpdate = false;
 let lastUrl = ''; // Track URL for SPA navigation detection
 let activeTab = 'clips'; // Track active tab
+let isApplyingHighlights = false;
+let currentAnnotationFilter = null; // Ensure this is declared globally
 
 // Style utility functions
 const buttonStyles = {
@@ -178,12 +270,84 @@ const applyButtonStyles = (button, type = 'primary') => {
   button.style.backgroundColor = type === 'primary' ? '#c96442' : '#444';
 };
 
+// --- UPDATED FUNCTION (v3) ---
+// Inject a button into the Claude action bar, next to the Share button
+function injectHeaderButton() {
+  const buttonId = 'claude-notes-action-button';
+  // More robust check: Wait for the specific Share button text
+  const checkInterval = setInterval(() => {
+    // Find the button containing the text "Share"
+    const shareButton = Array.from(document.querySelectorAll('header button')).find(btn => btn.textContent.trim() === 'Share');
+
+    // Find the div directly wrapping the Share button (often data-state=closed)
+    const shareButtonWrapper = shareButton?.parentNode;
+
+    // Find the container holding the group of buttons (Share, Notes, etc.)
+    const buttonGroupContainer = shareButtonWrapper?.parentNode;
+
+    // Ensure all elements are found and our button isn't already there
+    if (shareButton && shareButtonWrapper && buttonGroupContainer && !document.getElementById(buttonId)) {
+      console.log('Claude Notes: Found Share button anchor, injecting Notes button...');
+      clearInterval(checkInterval); // Stop checking
+
+      // 1. Clone the actual Share BUTTON
+      const notesButton = shareButton.cloneNode(true); // Deep clone the button
+
+      // 2. Set unique ID
+      notesButton.id = buttonId;
+
+      // 3. Define the new SVG markup
+      const newSvgMarkup = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 18 18"><path fill="currentColor" fill-rule="evenodd" d="M3.422 2.85a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v12.3a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1v-.68H3a.422.422 0 0 1 0-.845h.422v-1.68H3a.422.422 0 0 1 0-.843h.422v-1.68H3a.422.422 0 0 1 0-.843h.422v-1.68H3a.422.422 0 0 1 0-.844h.422v-1.68H3a.422.422 0 0 1 0-.843h.422v-.683Zm.844 1.525h.425a.422.422 0 0 0 0-.843h-.425v-.59a.25.25 0 0 1 .25-.25h9.812a.25.25 0 0 1 .25.25V15.06a.25.25 0 0 1-.25.25H4.516a.25.25 0 0 1-.25-.25v-.59h.425a.422.422 0 0 0 0-.843h-.425v-1.68h.425a.42.42 0 0 0 .262-.091.425.425 0 0 0 .16-.331.422.422 0 0 0-.422-.422h-.425v-1.68h.425a.422.422 0 0 0 0-.843h-.425v-1.68h.425a.422.422 0 0 0 0-.844h-.425v-1.68Zm1.695.84c0 .233.19.422.422.422h6.084a.422.422 0 0 0 0-.844H6.383a.415.415 0 0 0-.309.136.39.39 0 0 0-.107.223l-.006.063Zm0 2.524c0 .233.19.422.422.422h6.084a.422.422 0 0 0 0-.844H6.383a.422.422 0 0 0-.422.422Zm.422 2.945a.422.422 0 0 1 0-.844h6.084a.422.422 0 0 1 0 .844H6.383Zm-.422 2.102c0 .233.19.421.422.421h6.084a.422.422 0 0 0 0-.843H6.383a.423.423 0 0 0-.422.422Z" clip-rule="evenodd"/></svg>`; // NOTE: Changed fill="#000" to fill="currentColor" to inherit color
+
+      // 4. Replace content (SVG + Text)
+      notesButton.innerHTML = newSvgMarkup + ' Notes';
+
+      // 5. Add click listener
+      notesButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Claude Notes: Action bar button clicked.');
+        const currentConvId = extractConversationId();
+        if (currentConvId === 'default') {
+          alert('Claude Notes: Please open or start a conversation to use notes.');
+          return;
+        }
+        chrome.runtime.sendMessage({ action: 'toggleModal' });
+      });
+
+      // 6. Insert the new Notes button into the group container,
+      //    BEFORE the Share button's wrapper div.
+      buttonGroupContainer.insertBefore(notesButton, shareButtonWrapper);
+      console.log('Claude Notes: Action bar button injected before Share button wrapper.');
+
+    } else if (document.getElementById(buttonId)) {
+      // Button already exists
+      clearInterval(checkInterval);
+    }
+  }, 500);
+
+  // Timeout
+  setTimeout(() => {
+    clearInterval(checkInterval);
+    if (!document.getElementById(buttonId)) {
+      console.log('Claude Notes: Could not find Share button anchor after 15 seconds.');
+    }
+  }, 15000);
+}
+// --- END UPDATED FUNCTION (v3) ---
+
 // Initialize extension
 function init() {
   // Only run on Claude.ai
   if (!window.location.href.includes('claude.ai')) return;
   
   console.log('Claude Notes: Initializing extension...');
+  
+  // Inject our styles
+  injectHighlightStyles();
+  
+  // Attempt to inject the header/action bar button
+  injectHeaderButton(); // This now targets the action bar button
   
   // Store current URL
   lastUrl = window.location.href;
@@ -386,7 +550,7 @@ function createModal() {
   noteModal.id = 'claude-notes-modal';
   applyStyles(noteModal, createStyleObject(baseStyles.modal, {
     top: '100px',
-    right: '50px',
+    right: '24px', // Changed from 50px
     width: '300px',
     minHeight: '100px',
     maxHeight: '500px',
@@ -435,39 +599,95 @@ function createModal() {
   modalContent.id = 'claude-notes-content';
   applyStyles(modalContent, baseStyles.content);
   
+  // NEW: Create Filter Container (initially hidden)
+  const filterContainer = document.createElement('div');
+  filterContainer.id = 'claude-notes-filter-container';
+  applyStyles(filterContainer, {
+    display: 'none', // Start hidden
+    // Uniform padding
+    padding: `${styles.spacing.sm} ${styles.spacing.md}`,
+    borderBottom: `1px solid ${styles.colors.border}`,
+    backgroundColor: styles.colors.background.white,
+    alignItems: 'center', // Vertically align items
+    gap: styles.spacing.sm
+  });
+
+  const selectFontSize = '0.9rem'; // Define common font size
+  const selectPadding = styles.spacing.sm; // Define common padding
+
+  const labelSelect = document.createElement('select');
+  labelSelect.id = 'claude-notes-label-filter-select';
+  applyStyles(labelSelect, {
+    flex: '1', 
+    padding: selectPadding, 
+    fontSize: selectFontSize, // Apply common font size
+    border: `1px solid ${styles.colors.border}`,
+    borderRadius: '4px',
+    boxSizing: 'border-box' // Consistent height calculation
+  });
+  labelSelect.addEventListener('change', () => {
+    currentAnnotationFilter = labelSelect.value || null; // Explicitly null if empty value
+    updateModalContent();
+  });
+
+  const clearFilterButton = document.createElement('button');
+  clearFilterButton.id = 'claude-notes-clear-filter-button';
+  clearFilterButton.textContent = 'Clear';
+  applyStyles(clearFilterButton, createStyleObject(baseStyles.actionButton, {
+    backgroundColor: styles.colors.text.normal,
+    padding: selectPadding, // Use same padding as select
+    fontSize: selectFontSize, // Apply common font size
+    lineHeight: '1.2', // Adjust line-height for vertical centering if needed
+    boxSizing: 'border-box' // Consistent height calculation
+  }));
+  clearFilterButton.disabled = true;
+  clearFilterButton.addEventListener('click', () => {
+    currentAnnotationFilter = null;
+    labelSelect.value = "";
+    updateModalContent();
+  });
+
+  filterContainer.appendChild(labelSelect);
+  filterContainer.appendChild(clearFilterButton);
+
   // Create modal actions
   const modalActions = document.createElement('div');
   applyStyles(modalActions, baseStyles.actions);
   
-  // Add "View All Notes" link
-  const viewAllLink = document.createElement('a');
-  viewAllLink.textContent = 'View All Notes';
-  viewAllLink.href = '#';
-  viewAllLink.style.backgroundColor = '#c96442';
-  viewAllLink.style.color = 'white';
-  viewAllLink.style.padding = '8px 12px';
-  viewAllLink.style.borderRadius = '4px';
-  viewAllLink.style.textDecoration = 'none';
-  viewAllLink.style.display = 'inline-block';
-  viewAllLink.style.cursor = 'pointer';
-  viewAllLink.addEventListener('click', (e) => {
-    e.preventDefault();
+  // Change "View All Notes" from link to button
+  const viewAllButton = document.createElement('button');
+  viewAllButton.id = 'claude-notes-view-all-button'; // <<< Add ID
+  viewAllButton.textContent = 'View All Notes';
+  // Apply base action button styles, override background, and center text
+  applyStyles(viewAllButton, createStyleObject(
+    baseStyles.actionButton, 
+    {
+      backgroundColor: styles.colors.primary, // Keep primary color
+      textAlign: 'center' // Center the text within the button
+      // textDecoration: 'none' // Not needed for button
+    }
+  ));
+  viewAllButton.addEventListener('click', (e) => {
+    // e.preventDefault(); // Not needed for button
     chrome.runtime.sendMessage({ action: 'openLibrary' });
   });
   
   const clearButton = document.createElement('button');
+  clearButton.id = 'claude-notes-clear-all-button'; // <<< Add ID
   clearButton.textContent = 'Clear All';
   applyStyles(clearButton, createStyleObject(baseStyles.actionButton, {
-    backgroundColor: '#f44336'
+    backgroundColor: '#f44336' // Keep danger color
   }));
   clearButton.addEventListener('click', clearAllClips);
   
-  modalActions.appendChild(viewAllLink);
+  // Append buttons
+  modalActions.appendChild(viewAllButton);
   modalActions.appendChild(clearButton);
   
   // Assemble modal
   noteModal.appendChild(modalHeader);
   noteModal.appendChild(tabContainer);
+  noteModal.appendChild(filterContainer); // Add filter container here
   noteModal.appendChild(modalContent);
   noteModal.appendChild(modalActions);
   
@@ -585,16 +805,39 @@ function findMessageContainer(node) {
 // Handle text selection
 function handleTextSelection(e) {
   const selection = window.getSelection();
-  if (!selection.toString().trim()) {
-    // Remove clip button if no text is selected
-    const existingButton = document.getElementById('claude-notes-clip-button');
-    if (existingButton) {
-      document.body.removeChild(existingButton);
+  const selectedText = selection.toString().trim(); // Get trimmed text first
+
+  // Remove clip buttons if no text is selected or if selection is cleared
+  const existingButtonContainer = document.querySelector('div[style*="position: absolute"][id*="claude-notes-clip-button"]'); // Find container
+  if (!selectedText) {
+    if (existingButtonContainer) {
+        document.body.removeChild(existingButtonContainer);
     }
     return;
   }
-  
-  console.log('Text selected:', selection.toString().trim());
+
+  // --- NEW CHECK: Prevent clipping inside the modal --- 
+  if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      let ancestor = range.commonAncestorContainer;
+      // Traverse up to check if selection originated within our modals
+      while(ancestor && ancestor !== document.body) {
+          if (ancestor.nodeType === Node.ELEMENT_NODE && 
+              (ancestor.id === 'claude-notes-modal' || ancestor.id === 'claude-notes-annotation-modal')) 
+          {
+              console.log('Selection is inside the Claude Notes modal, ignoring.');
+               // Also remove buttons if they somehow appeared for an intra-modal selection
+              if (existingButtonContainer) {
+                  document.body.removeChild(existingButtonContainer);
+              }
+              return; // Exit early, don't show clip buttons
+          }
+          ancestor = ancestor.parentNode;
+      }
+  }
+  // --- END NEW CHECK ---
+
+  console.log('Text selected:', selectedText);
   
   // Check if selection is within a code block
   let isCodeBlock = false;
@@ -696,22 +939,22 @@ function createClipButton(selection, isCodeBlock) {
     saveClip(selection, isCodeBlock, false);
     clipButton.textContent = 'Saved!';
     clipButton.style.backgroundColor = '#4CAF50';
-    setTimeout(() => {
-      if (document.body.contains(buttonContainer)) {
-        document.body.removeChild(buttonContainer);
-      }
+    setTimeout(() => { 
+        // Find the container to remove
+        const buttonContainer = clipButton.closest('div[style*="position: absolute"]'); 
+        if (buttonContainer && document.body.contains(buttonContainer)) {
+            document.body.removeChild(buttonContainer);
+        }
     }, 1000);
   });
   
   secondClipButton.addEventListener('click', () => {
-    saveClip(selection, isCodeBlock, true);
-    secondClipButton.textContent = 'Saved!';
-    secondClipButton.style.backgroundColor = '#4CAF50';
-    setTimeout(() => {
-      if (document.body.contains(buttonContainer)) {
+    openAnnotationModal(selection, isCodeBlock);
+    // Remove the button container immediately after opening the modal
+    const buttonContainer = secondClipButton.closest('div[style*="position: absolute"]'); // Find the container using a more specific selector if needed
+    if (buttonContainer && document.body.contains(buttonContainer)) {
         document.body.removeChild(buttonContainer);
-      }
-    }, 1000);
+    }
   });
   
   buttonContainer.appendChild(clipButton);
@@ -813,40 +1056,152 @@ function saveClip(selection, isCodeBlock, isSecondary) {
     
     console.log('Saving clip, isCodeBlock:', isCodeBlock, 'isSecondary:', isSecondary);
     
-    // Create a new clip object using currentClipId
-    const clip = {
-        id: currentClipId,
-        text: selectedText,
+    const originalRange = selection.getRangeAt(0);
+    const startContainer = originalRange.startContainer;
+    const endContainer = originalRange.endContainer;
+
+    // Define block elements we want to potentially split into separate clips
+    const splittableBlockElements = ['P', 'LI']; // Add other tags like H1-H6 if needed
+
+    // Find the nearest block element ancestors for start and end
+    let startBlock = startContainer;
+    while (startBlock && startBlock.nodeType !== Node.ELEMENT_NODE) { startBlock = startBlock.parentNode; } // Ensure startBlock is an element
+    while (startBlock && !splittableBlockElements.includes(startBlock.nodeName) && startBlock !== document.body) {
+        startBlock = startBlock.parentNode;
+    }
+    if (startBlock === document.body) startBlock = null; // Didn't find a valid block ancestor
+
+    let endBlock = endContainer;
+    while (endBlock && endBlock.nodeType !== Node.ELEMENT_NODE) { endBlock = endBlock.parentNode; } // Ensure endBlock is an element
+    while (endBlock && !splittableBlockElements.includes(endBlock.nodeName) && endBlock !== document.body) {
+        endBlock = endBlock.parentNode;
+    }
+    if (endBlock === document.body) endBlock = null; // Didn't find a valid block ancestor
+
+    // Check if selection spans multiple distinct splittable block elements
+    const spansMultipleBlocks = startBlock && endBlock && startBlock !== endBlock;
+
+    if (spansMultipleBlocks) {
+        console.log('Selection spans multiple blocks, attempting to split...');
+        const allBlocksInRange = [];
+        let currentBlock = startBlock;
+
+        // Find the common ancestor to constrain the search
+        const commonAncestor = originalRange.commonAncestorContainer;
+        let searchRoot = commonAncestor;
+        while(searchRoot && searchRoot.nodeType !== Node.ELEMENT_NODE) { searchRoot = searchRoot.parentNode; }
+        if (!searchRoot) searchRoot = document.body; // Fallback
+
+        // Get all potential block elements within the common ancestor
+        const potentialBlocks = Array.from(searchRoot.querySelectorAll(splittableBlockElements.join(', ')));
+        
+        // Filter to get only the blocks intersecting the original range
+        const intersectingBlocks = potentialBlocks.filter(block => 
+            originalRange.intersectsNode(block) &&
+            splittableBlockElements.includes(block.nodeName)
+        );
+
+        let clipsCreatedCount = 0;
+
+        intersectingBlocks.forEach((block) => {
+            const itemRange = document.createRange();
+            itemRange.selectNodeContents(block); // Start with the full block
+
+            // Calculate the actual intersection range accurately
+            const intersectionRange = document.createRange();
+            
+            // Start of intersection
+            const startCompare = originalRange.compareBoundaryPoints(Range.START_TO_START, itemRange);
+            if (startCompare <= 0) { // Selection starts before or at the start of the block
+                intersectionRange.setStart(itemRange.startContainer, itemRange.startOffset);
+            } else { // Selection starts within the block
+                intersectionRange.setStart(originalRange.startContainer, originalRange.startOffset);
+            }
+            
+            // End of intersection
+            const endCompare = originalRange.compareBoundaryPoints(Range.END_TO_END, itemRange);
+            if (endCompare >= 0) { // Selection ends after or at the end of the block
+                intersectionRange.setEnd(itemRange.endContainer, itemRange.endOffset);
+            } else { // Selection ends within the block
+                intersectionRange.setEnd(originalRange.endContainer, originalRange.endOffset);
+            }
+
+            const clipText = intersectionRange.toString().trim();
+            if (!clipText) return; // Skip empty clips
+
+            const clipRangeInfo = getRangeInfo(intersectionRange);
+            if (!clipRangeInfo) { 
+                console.error(`Could not get range info for block intersection: ${block.nodeName}`, block); 
+                return;
+            }
+
+            const isListItem = block.nodeName === 'LI';
+            const clip = createClipObject(
+                intersectionRange, 
+                clipText, 
+                isCodeBlock, 
+                isSecondary, 
+                currentClipId + clipsCreatedCount, 
+                isListItem 
+            );
+            
+            clips.push(clip);
+            highlightText(intersectionRange, clip.id, clip.isCode, clip.isSecondary);
+            clipsCreatedCount++;
+        });
+
+        if (clipsCreatedCount > 0) {
+            currentClipId += clipsCreatedCount;
+            updateStorageAndUI(); // Update storage and UI after processing all blocks
+        } else {
+            console.warn("Multi-block selection detected, but no splittable blocks processed. Saving as single block.");
+            handleSingleBlockSave(originalRange, selectedText, isCodeBlock, isSecondary);
+        }
+
+    } else {
+        // Handle non-list/non-multi-paragraph selections (single block)
+        console.log('Selection is within a single block or not splittable, saving as single clip.');
+        handleSingleBlockSave(originalRange, selectedText, isCodeBlock, isSecondary);
+    }
+}
+
+// Helper function to create a clip object (refactored)
+function createClipObject(range, text, isCodeBlock, isSecondary, id, isList = false) {
+    return {
+        id: id,
+        text: text,
         timestamp: new Date().toISOString(),
-        range: getRangeInfo(selection.getRangeAt(0)),
+        range: getRangeInfo(range), // Make sure getRangeInfo handles the specific range correctly
         url: window.location.href,
         isCode: isCodeBlock,
-        isSecondary: isSecondary
+        isSecondary: isSecondary,
+        isList: isList
     };
-    
-    // Add to clips array
+}
+
+// Helper function to handle saving a single block/non-list clip (refactored)
+function handleSingleBlockSave(range, text, isCodeBlock, isSecondary) {
+    const clip = createClipObject(range, text, isCodeBlock, isSecondary, currentClipId);
     clips.push(clip);
-    
-    // Increment currentClipId
-    currentClipId = clips.length;
-    
-    // Update the master object
+    currentClipId++;
+    highlightText(range, clip.id, clip.isCode, clip.isSecondary);
+    // Update storage and UI after saving
+    updateStorageAndUI();
+}
+
+// Refactored update logic
+function updateStorageAndUI() {
     allClips[currentConversationId].clips = clips;
     allClips[currentConversationId].lastUpdated = new Date().toISOString();
     
-    // Save to Chrome storage
     chrome.storage.local.set({ 'claudeNotesV2': allClips }, () => {
-        console.log('Claude Notes: Clip saved to conversation', currentConversationId);
+        console.log('Claude Notes: Clip(s) saved/updated in conversation', currentConversationId);
     });
     
-    // Highlight the selected text
-    highlightText(selection.getRangeAt(0), clip.id, isCodeBlock, isSecondary);
-    
-    // Update the modal content
     updateModalContent();
-    
-    // Show the modal
-    noteModal.style.display = 'flex';
+    if (noteModal) {
+        noteModal.style.display = 'flex';
+    }
 }
 
 // Get information about a range that can be stored
@@ -854,15 +1209,80 @@ function getRangeInfo(range) {
   const container = findMessageContainer(range.commonAncestorContainer);
   if (!container) return null;
   
-  // Create a fingerprint of the message content
+  // Get the actual element containing the START of the selection range
+  let element = range.startContainer; 
+  while (element && element.nodeType !== Node.ELEMENT_NODE) {
+    element = element.parentNode;
+  }
+  
+  // If the determined element isn't an LI itself, try finding the closest LI ancestor 
+  // that still contains the start of the range. This is crucial for ranges starting in nested elements within an LI.
+  if (element && element.tagName !== 'LI') {
+      const closestLi = element.closest('li');
+      // Ensure the found LI actually contains the start of the range we're analyzing
+      if (closestLi && closestLi.contains(range.startContainer)) { 
+          element = closestLi;
+      } else {
+          // Fallback if we can't reliably find the LI for this range part.
+          // Try the commonAncestorContainer's parent element.
+          console.warn("getRangeInfo: Could not reliably find LI element for range start, context might be less accurate.", range);
+          element = range.commonAncestorContainer;
+           while (element && element.nodeType !== Node.ELEMENT_NODE) {
+               element = element.parentNode;
+           }
+      }
+  }
+  
+  // If element is still null or not identifiable, return null
+  if (!element || !element.tagName) {
+       console.error("getRangeInfo: Could not determine element for range.", range);
+       return null; 
+  }
+
+  // Get element context
+  const elementContext = {
+    type: element.tagName.toLowerCase(),
+    classes: Array.from(element.classList || []).join(' '), // Added check for classList
+    parentType: element.parentNode ? element.parentNode.tagName.toLowerCase() : null, // Added check for parentNode
+    parentClasses: element.parentNode ? Array.from(element.parentNode.classList || []).join(' ') : '', // Added check
+    isHeading: element.tagName.match(/^H[1-6]$/i) ? true : false,
+    headingLevel: element.tagName.match(/^H([1-6])$/i)?.[1] || null,
+    isList: element.tagName === 'LI',
+    listType: element.closest('ul, ol')?.tagName.toLowerCase() || null,
+    listContext: null // Initialize as null
+  };
+
+  // Store list context ONLY if it's definitely a list item and has a parent list
+  if (elementContext.isList && element.parentNode) {
+      const parentList = element.closest('ul, ol'); // Ensure we get the list element itself
+      if (parentList) { // Check if parentList was found
+          elementContext.listContext = {
+              parentList: parentList.tagName.toLowerCase(),
+              listStyle: window.getComputedStyle(element).listStyleType,
+              isOrdered: parentList.tagName === 'OL',
+              // IMPORTANT: Calculate index relative to the PARENT LIST children
+              itemIndex: Array.from(parentList.children).indexOf(element), 
+              listStart: parentList.getAttribute('start') || null,
+              listReversed: parentList.hasAttribute('reversed') || false
+          };
+      } else {
+          console.warn("getRangeInfo: LI element found, but could not find parent UL/OL.", element);
+      }
+  }
+
   const messageContent = container.textContent;
   const messageFingerprint = hashString(messageContent);
   
+  // Return the range info, including the potentially refined element context
   return {
-    text: range.toString(),
+    text: range.toString(), // Text content of the specific range (intersection)
     containerFingerprint: messageFingerprint,
-    startOffset: range.startOffset,
-    endOffset: range.endOffset
+    startOffset: range.startOffset, // Relative to startContainer of the passed range
+    endOffset: range.endOffset,     // Relative to endContainer of the passed range
+    // Store the start/end containers themselves for more robust restoration?
+    // startContainerPath: getNodePath(range.startContainer), // Example for future enhancement
+    // endContainerPath: getNodePath(range.endContainer),     // Example for future enhancement
+    elementContext: elementContext 
   };
 }
 
@@ -885,7 +1305,10 @@ function handleHeadingHighlight(range, clipId, isSecondary) {
 
     // Create wrapper span
     const textWrapper = document.createElement('span');
-    textWrapper.className = 'claude-notes-text-wrapper';
+    textWrapper.className = 'claude-notes-text-wrapper claude-notes-heading-wrapper claude-notes-highlight';
+    if (isSecondary) {
+      textWrapper.classList.add('secondary');
+    }
     textWrapper.dataset.clipId = clipId;
     textWrapper.dataset.originalClasses = heading.getAttribute('class');
     textWrapper.dataset.isHeadingClip = 'true';
@@ -893,16 +1316,6 @@ function handleHeadingHighlight(range, clipId, isSecondary) {
     // Create superscript
     const superscript = document.createElement('sup');
     superscript.textContent = clipId + 1;
-    superscript.style.color = isSecondary ? '#444' : '#c96442';
-    superscript.style.verticalAlign = 'baseline';
-    superscript.style.marginRight = '4px';
-    superscript.style.fontWeight = 'bold';
-    
-    // Preserve heading styles while adding highlight
-    textWrapper.style.textDecoration = 'underline';
-    textWrapper.style.textDecorationColor = isSecondary ? '#444' : '#c96442';
-    textWrapper.style.textDecorationThickness = '1px';
-    textWrapper.style.display = 'inline';
     
     // Move content to wrapper
     const content = range.extractContents();
@@ -924,7 +1337,7 @@ function handleListHighlight(range, clipId, isSecondary) {
   try {
     // Find the list container
     let listContainer = range.commonAncestorContainer;
-    while (listContainer && !['UL', 'OL'].includes(listContainer.nodeName)) {
+    while (listContainer && !['ul', 'ol'].includes(listContainer.nodeName)) {
       listContainer = listContainer.parentNode;
     }
     
@@ -943,7 +1356,9 @@ function handleListHighlight(range, clipId, isSecondary) {
     // Create a highlight wrapper for the entire selection
     const highlightWrapper = document.createElement('span');
     highlightWrapper.className = 'claude-notes-highlight';
-    if (isSecondary) highlightWrapper.classList.add('secondary');
+    if (isSecondary) {
+      highlightWrapper.classList.add('secondary');
+    }
     highlightWrapper.dataset.clipId = clipId;
     highlightWrapper.dataset.isListClip = 'true';
     
@@ -951,10 +1366,6 @@ function handleListHighlight(range, clipId, isSecondary) {
     const firstItem = selectedItems[0];
     const superscript = document.createElement('sup');
     superscript.textContent = clipId + 1;
-    superscript.style.color = isSecondary ? '#444' : '#c96442';
-    superscript.style.verticalAlign = 'baseline';
-    superscript.style.marginRight = '4px';
-    superscript.style.fontWeight = 'bold';
     
     // Insert superscript at the start of the text content
     const textNode = Array.from(firstItem.childNodes).find(node => 
@@ -977,7 +1388,10 @@ function handleListHighlight(range, clipId, isSecondary) {
       let textWrapper = item.querySelector('.claude-notes-text-wrapper');
       if (!textWrapper) {
         textWrapper = document.createElement('span');
-        textWrapper.className = 'claude-notes-text-wrapper claude-notes-list-item';
+        textWrapper.className = 'claude-notes-text-wrapper claude-notes-list-item claude-notes-highlight';
+        if (isSecondary) {
+          textWrapper.classList.add('secondary');
+        }
         
         // Store original attributes
         textWrapper.dataset.originalClasses = originalClasses;
@@ -1002,17 +1416,6 @@ function handleListHighlight(range, clipId, isSecondary) {
         item.appendChild(textWrapper);
       }
       
-      // Apply persistent styles while preserving Claude's structure
-      textWrapper.style.textDecoration = 'underline';
-      textWrapper.style.textDecorationColor = isSecondary ? '#444' : '#c96442';
-      textWrapper.style.textDecorationThickness = '1px';
-      textWrapper.style.display = 'inline';
-      
-      // Preserve list item styles from Claude
-      item.style.display = 'list-item';
-      item.style.whiteSpace = 'normal';
-      item.style.breakWords = 'break-words';
-      
       // Store original list style and additional info for ordered lists
       const computedStyle = window.getComputedStyle(item);
       textWrapper.dataset.originalListStyle = computedStyle.listStyleType;
@@ -1035,18 +1438,12 @@ function handleListHighlight(range, clipId, isSecondary) {
         
         // For ordered lists, explicitly set the counter
         item.style.setProperty('counter-reset', `list-item ${originalNumber - 1}`);
-        item.style.listStyle = textWrapper.dataset.originalListStyle;
-      } else {
-        item.style.listStyle = textWrapper.dataset.originalListStyle || 'disc';
       }
       
-      // Preserve Claude's list spacing
+      // Preserve list spacing
       const listParent = item.closest('ul, ol');
-      if (listParent) {
+      if (listParent && !listParent.style.paddingLeft) {
         listParent.style.paddingLeft = '28px'; // Claude's default
-        if (listParent.classList.contains('[&:not(:last-child)_ul]:pb-1')) {
-          listParent.style.paddingBottom = '0.25rem';
-        }
       }
     });
     
@@ -1059,291 +1456,157 @@ function handleListHighlight(range, clipId, isSecondary) {
 
 // Modify the highlightText function to handle lists specially
 function highlightText(range, clipId, isCodeBlock, isSecondary) {
-  try {
-    // Check if we're in the modal
-    const modal = document.getElementById('claude-notes-modal');
-    if (modal && modal.contains(range.commonAncestorContainer)) {
-      return false;
-    }
+    try {
+        // Check if we're in the modal
+        const modal = document.getElementById('claude-notes-modal');
+        if (modal && modal.contains(range.commonAncestorContainer)) {
+            return false;
+        }
 
-    // Check if we're dealing with a heading
-    const headingElements = ['H1', 'H2', 'H3', 'H4', 'H5', 'H6'];
-    let headingContainer = range.commonAncestorContainer;
-    while (headingContainer && !headingElements.includes(headingContainer.nodeName)) {
-      headingContainer = headingContainer.parentNode;
-    }
-    
-    if (headingContainer && !isCodeBlock) {
-      return handleHeadingHighlight(range, clipId, isSecondary);
-    }
+        // Get the containing element
+        let element = range.commonAncestorContainer;
+        while (element && element.nodeType !== Node.ELEMENT_NODE) {
+            element = element.parentNode;
+        }
 
-    // Check if we're dealing with a list
-    let listContainer = range.commonAncestorContainer;
-    while (listContainer && !['UL', 'OL'].includes(listContainer.nodeName)) {
-      listContainer = listContainer.parentNode;
-    }
-    
-    if (listContainer && !isCodeBlock) {
-      return handleListHighlight(range, clipId, isSecondary);
-    }
-
-    // Continue with existing highlight logic for non-list elements
-    // Check if the selection crosses multiple node boundaries
-    const startContainer = range.startContainer;
-    const endContainer = range.endContainer;
-    
-    // Simple case: selection is within a single text node
-    if (startContainer === endContainer && startContainer.nodeType === Node.TEXT_NODE) {
-      try {
-        // Use surroundContents for simple text node selections
+        // Create base highlight span
         const highlightSpan = document.createElement('span');
-        highlightSpan.className = isCodeBlock ? 'claude-notes-highlight code' : 'claude-notes-highlight';
+        highlightSpan.className = 'claude-notes-highlight';
         if (isSecondary) highlightSpan.classList.add('secondary');
         highlightSpan.dataset.clipId = clipId;
-        
-        if (!isCodeBlock) {
-          highlightSpan.style.textDecoration = 'underline';
-          highlightSpan.style.textDecorationColor = '#c96442';
-          highlightSpan.style.textDecorationThickness = '1px';
-          highlightSpan.style.position = 'relative';
+
+        // Add element-specific attributes
+        const tagName = element.tagName.toLowerCase();
+        highlightSpan.dataset.elementType = tagName;
+
+        // Special handling for list items
+        if (tagName === 'li') {
+            highlightSpan.classList.add('whitespace-normal');
+            const listParent = element.closest('ul, ol');
+            if (listParent) {
+                highlightSpan.dataset.listType = listParent.tagName.toLowerCase();
+                // Store list context
+                highlightSpan.dataset.listContext = JSON.stringify({
+                    isOrdered: listParent.tagName === 'OL',
+                    listStart: listParent.getAttribute('start'),
+                    listReversed: listParent.hasAttribute('reversed'),
+                    itemIndex: Array.from(listParent.children).indexOf(element)
+                });
+            }
         }
+        // Handle other element types
+        else if (tagName === 'p') {
+            highlightSpan.classList.add('whitespace-pre-wrap');
+        } else if (tagName.match(/^h[1-6]$/)) {
+            highlightSpan.dataset.headingLevel = tagName.charAt(1);
+        }
+
+        // Store original classes
+        highlightSpan.dataset.originalClasses = Array.from(element.classList).join(' ');
         
+        // Apply common styling
+        if (!isCodeBlock) {
+            highlightSpan.style.textDecoration = 'underline';
+            highlightSpan.style.textDecorationColor = isSecondary ? '#444' : '#c96442';
+            highlightSpan.style.textDecorationThickness = '1px';
+            highlightSpan.style.position = 'relative';
+        }
+
+        // Add superscript
         const superscript = document.createElement('sup');
-        superscript.textContent = clipId + 1; // Display 1-based indexing
+        superscript.textContent = clipId + 1;
         superscript.style.color = isSecondary ? '#444' : '#c96442';
         superscript.style.verticalAlign = 'baseline';
         
-        // Clone the range to avoid modifying the original
-        const clonedRange = range.cloneRange();
-        clonedRange.surroundContents(highlightSpan);
-        highlightSpan.prepend(superscript);
-        return true;
-      } catch (nodeError) {
-        // Fall through to complex case if this fails
-      }
-    }
-    
-    // Complex case: selection spans multiple nodes or elements
-    try {
-      // Use a DocumentFragment for complex selections
-      const fragment = range.extractContents();
-      
-      // Create highlight span
-      const highlightSpan = document.createElement('span');
-      highlightSpan.className = isCodeBlock ? 'claude-notes-highlight code' : 'claude-notes-highlight';
-      if (isSecondary) highlightSpan.classList.add('secondary');
-      highlightSpan.dataset.clipId = clipId;
-      
-      if (!isCodeBlock) {
-        highlightSpan.style.textDecoration = 'underline';
-        highlightSpan.style.textDecorationColor = '#c96442';
-        highlightSpan.style.textDecorationThickness = '1px';
-        highlightSpan.style.position = 'relative';
-        if (isSecondary) {
-          // Removed the bold styling for secondary action
+        try {
+            // Try to use surroundContents for simple cases
+            const clonedRange = range.cloneRange();
+            clonedRange.surroundContents(highlightSpan);
+            highlightSpan.prepend(superscript);
+            return true;
+        } catch (simpleError) {
+            // If that fails, try the complex case
+            try {
+                const fragment = range.extractContents();
+                highlightSpan.appendChild(superscript);
+                highlightSpan.appendChild(fragment);
+                range.insertNode(highlightSpan);
+                return true;
+            } catch (complexError) {
+                console.error('Error in complex highlight case:', complexError);
+                return false;
+            }
         }
-      }
-      
-      // Create superscript number
-      const superscript = document.createElement('sup');
-      superscript.textContent = clipId + 1; // Display 1-based indexing
-      superscript.style.color = isSecondary ? '#444' : '#c96442';
-      superscript.style.fontWeight = 'bold';
-      superscript.style.verticalAlign = 'baseline';
-      
-      // Add the superscript to the beginning of the span
-      highlightSpan.appendChild(superscript);
-      
-      // Add the extracted contents to the highlight span
-      highlightSpan.appendChild(fragment);
-      
-      // Insert the highlight span at the start of the range
-      range.insertNode(highlightSpan);
-      return true;
-    } catch (complexError) {
-      // Fall through to fallback method
+    } catch (e) {
+        console.error('Error in highlightText:', e);
+        return false;
     }
-    
-  } catch (e) {
-    console.error('Claude Notes: Error highlighting text', e);
-  }
-  
-  // Fallback method - try to at least apply a basic highlight to part of the selection
-  try {
-    // Create a new range for just a portion of the selection if possible
-    const newRange = document.createRange();
-    newRange.setStart(range.startContainer, range.startOffset);
-    newRange.setEnd(range.startContainer, 
-                   Math.min(range.startContainer.length || 0, 
-                            range.startOffset + 5));
-    
-    const highlightSpan = document.createElement('span');
-    highlightSpan.className = isCodeBlock ? 'claude-notes-highlight code' : 'claude-notes-highlight';
-    if (isSecondary) highlightSpan.classList.add('secondary');
-    highlightSpan.dataset.clipId = clipId;
-    
-    if (!isCodeBlock) {
-      highlightSpan.style.textDecoration = 'underline';
-      highlightSpan.style.textDecorationColor = '#c96442';
-      highlightSpan.style.textDecorationThickness = '1px';
-      if (isSecondary) {
-        // Removed the bold styling for secondary action
-      }
-    }
-    
-    // Create the superscript number
-    const superscript = document.createElement('sup');
-    superscript.textContent = clipId + 1; // Display 1-based indexing
-    superscript.style.color = isSecondary ? '#444' : '#c96442';
-    superscript.style.fontWeight = 'bold';
-    superscript.style.verticalAlign = 'baseline';
-    
-    // If this fails, we'll just skip the highlighting
-    newRange.surroundContents(highlightSpan);
-    highlightSpan.prepend(superscript);
-    return true;
-  } catch (fallbackError) {
-    console.error('Claude Notes: Fallback highlighting also failed', fallbackError);
-    return false;
-  }
 }
 
 // Apply highlights for all saved clips
 function applyHighlights(retryCount = 0, maxRetries = 5) {
-  console.log('Applying highlights for conversation:', currentConversationId);
-  console.log('Number of clips to highlight:', clips.length);
-  
-  // Always clear all existing highlights first
-  clearAllHighlights();
-  
-  if (!clips || clips.length === 0) {
-    console.log('No clips to highlight');
+  if (isApplyingHighlights) {
+    console.log('Already applying highlights, skipping...');
     return;
   }
   
-  // Find all possible message containers
-  const potentialContainers = [];
+  isApplyingHighlights = true;
+  console.log('Applying highlights for conversation:', currentConversationId);
   
-  // Add all elements that could be Claude message containers
-  // This covers a wide range of possible DOM structures
-  const containerSelectors = [
-    '.message', '.claude-message', '.assistant-message', '.prose',
-    '[role="region"]', '[role="article"]', '.whitespace-pre-wrap',
-    'p', 'div.text-message', 'div[data-message]'
-  ];
+  clearAllHighlights();
   
-  containerSelectors.forEach(selector => {
-    try {
-      const elements = document.querySelectorAll(selector);
-      elements.forEach(el => potentialContainers.push(el));
-    } catch (e) {
-      console.error('Error finding containers with selector:', selector, e);
-    }
-  });
-  
-  console.log('Found potential containers:', potentialContainers.length);
-  
-  // If no containers found and we haven't exceeded max retries, try again after a delay
-  // This helps wait for Claude's content to fully load before applying highlights
-  if (potentialContainers.length === 0 && retryCount < maxRetries) {
-    console.log(`No message containers found yet, retrying in ${500 * (retryCount + 1)}ms (attempt ${retryCount + 1}/${maxRetries})`);
-    setTimeout(() => {
-      applyHighlights(retryCount + 1, maxRetries);
-    }, 500 * (retryCount + 1)); // Exponential backoff
+  if (!clips || clips.length === 0) {
+    isApplyingHighlights = false;
     return;
   }
   
   let highlightedCount = 0;
   
-  // Try to highlight each clip
   clips.forEach(clip => {
-    if (!clip.range) {
-      console.log('Clip has no range info:', clip);
-      return;
-    }
+    if (!clip.range || !clip.range.elementContext) return;
     
     let found = false;
+    const elementContext = clip.range.elementContext;
     
-    // Check if this is a list clip
-    const existingListHighlight = document.querySelector(`.claude-notes-highlight[data-clip-id="${clip.id}"][data-is-list-clip="true"]`);
-    if (existingListHighlight) {
-      // Restore list item styling
-      const listItems = document.querySelectorAll(`.claude-notes-list-item[data-clip-id="${clip.id}"]`);
-      listItems.forEach(item => {
-        // Restore text decoration
-        item.style.textDecoration = 'underline';
-        item.style.textDecorationColor = clip.isSecondary ? '#444' : '#c96442';
-        item.style.textDecorationThickness = '1px';
-        item.style.display = 'inline';
-        
-        // Restore original classes and attributes
-        const listItemParent = item.closest('li');
-        if (listItemParent) {
-          if (item.dataset.originalClasses) {
-            listItemParent.className = item.dataset.originalClasses;
+    // Try to find matching elements based on stored context
+    const elementSelector = `${elementContext.type}${elementContext.classes ? '.' + elementContext.classes.split(' ').join('.') : ''}`;
+    const elements = document.querySelectorAll(elementSelector);
+    
+    for (const element of elements) {
+      try {
+        if (element.textContent.includes(clip.text)) {
+          const range = findTextInContainer(element, clip.text);
+          if (range) {
+            highlightText(range, clip.id, clip.isCode, clip.isSecondary);
+            found = true;
+            highlightedCount++;
+            break;
           }
-          if (item.dataset.originalIndex) {
-            listItemParent.setAttribute('index', item.dataset.originalIndex);
-          }
-          
-          listItemParent.style.display = 'list-item';
-          listItemParent.style.whiteSpace = 'normal';
-          listItemParent.style.breakWords = 'break-words';
-          
-          // Handle ordered lists specially
-          if (item.dataset.isOrdered === 'true') {
-            const originalNumber = parseInt(item.dataset.originalNumber);
-            listItemParent.style.setProperty('counter-reset', `list-item ${originalNumber - 1}`);
-            
-            // Restore any special list attributes
-            const parentList = listItemParent.closest('ol');
-            if (parentList) {
-              if (item.dataset.listStart) {
-                parentList.setAttribute('start', item.dataset.listStart);
-              }
-              if (item.dataset.listReversed) {
-                parentList.setAttribute('reversed', '');
-              }
-              
-              // Restore list spacing
-              parentList.style.paddingLeft = '28px';
-              if (parentList.classList.contains('[&:not(:last-child)_ul]:pb-1')) {
-                parentList.style.paddingBottom = '0.25rem';
-              }
+        }
+      } catch (e) {
+        console.error('Error highlighting element:', e);
+      }
+    }
+    
+    // If not found with exact context, try fuzzy search
+    if (!found) {
+      const potentialContainers = document.querySelectorAll(elementContext.type);
+      for (const container of potentialContainers) {
+        try {
+          if (container.textContent.includes(clip.text)) {
+            const range = findTextInContainer(container, clip.text);
+            if (range) {
+              highlightText(range, clip.id, clip.isCode, clip.isSecondary);
+              found = true;
+              highlightedCount++;
+              break;
             }
           }
-          
-          listItemParent.style.listStyle = item.dataset.originalListStyle || 'disc';
-        }
-      });
-      found = true;
-      highlightedCount++;
-    }
-    
-    // Check if this is a heading clip
-    const existingHeadingHighlight = document.querySelector(`.claude-notes-text-wrapper[data-clip-id="${clip.id}"][data-is-heading-clip="true"]`);
-    if (existingHeadingHighlight) {
-      // Restore heading styling
-      existingHeadingHighlight.style.textDecoration = 'underline';
-      existingHeadingHighlight.style.textDecorationColor = clip.isSecondary ? '#444' : '#c96442';
-      existingHeadingHighlight.style.textDecorationThickness = '1px';
-      existingHeadingHighlight.style.display = 'inline';
-      
-      // Restore original heading classes
-      const originalClasses = existingHeadingHighlight.dataset.originalClasses;
-      if (originalClasses) {
-        const headingParent = existingHeadingHighlight.closest('h1, h2, h3, h4, h5, h6');
-        if (headingParent) {
-          headingParent.className = originalClasses;
+        } catch (e) {
+          console.error('Error in fuzzy search:', e);
         }
       }
-      
-      found = true;
-      highlightedCount++;
     }
-
-    // Continue with existing code for other types of clips...
-    // ... existing code ...
   });
   
   console.log(`Successfully highlighted ${highlightedCount} out of ${clips.length} clips`);
@@ -1353,8 +1616,10 @@ function applyHighlights(retryCount = 0, maxRetries = 5) {
     console.log(`No clips were highlighted, retrying in ${1000 * (retryCount + 1)}ms (attempt ${retryCount + 1}/${maxRetries})`);
     setTimeout(() => {
       applyHighlights(retryCount + 1, maxRetries);
-    }, 1000 * (retryCount + 1)); // Longer delay for subsequent attempts
+    }, 1000 * (retryCount + 1));
   }
+  
+  isApplyingHighlights = false;
 }
 
 // Clear all existing highlights from the page
@@ -1574,8 +1839,62 @@ function getTextNodes(element) {
 // Update the content of the modal with clips from current conversation
 function updateModalContent() {
   const modalContent = document.getElementById('claude-notes-content');
-  modalContent.innerHTML = '';
+  const filterContainer = document.getElementById('claude-notes-filter-container');
+  const labelSelect = document.getElementById('claude-notes-label-filter-select');
+  const clearFilterButton = document.getElementById('claude-notes-clear-filter-button');
   
+  modalContent.innerHTML = ''; // Clear previous content
+  
+  // --- Debugging Start ---
+  console.log(`--- updateModalContent ---`);
+  console.log(`Active Tab: ${activeTab}`);
+  console.log(`Total clips in memory: ${clips.length}`);
+  console.log(`Annotations in memory: ${clips.filter(c => c.isSecondary).length}`);
+  // --- Debugging End ---
+
+  // Handle filter UI visibility and population
+  if (activeTab === 'annotations' && labelSelect && filterContainer) {
+    filterContainer.style.display = 'flex'; // Show filter UI
+
+    // Get unique labels from *all* annotations
+    const uniqueLabels = [...new Set(
+        clips
+            .filter(clip => clip.isSecondary && clip.label)
+            .map(clip => clip.label)
+    )].sort();
+
+    // Populate select dropdown
+    // Store current value to reset it later if possible
+    const currentSelectedValue = labelSelect.value;
+    labelSelect.innerHTML = ''; // Clear previous options
+    
+    const defaultOption = document.createElement('option');
+    defaultOption.value = "";
+    defaultOption.textContent = "-- Filter by label --";
+    labelSelect.appendChild(defaultOption);
+
+    uniqueLabels.forEach(label => {
+        const option = document.createElement('option');
+        option.value = label;
+        option.textContent = label;
+        labelSelect.appendChild(option);
+    });
+
+    // Set current filter selection and button state
+    // Try to restore previous selection if it still exists, otherwise use global filter state
+    if (uniqueLabels.includes(currentSelectedValue)) {
+        labelSelect.value = currentSelectedValue;
+        currentAnnotationFilter = currentSelectedValue; // Ensure filter state matches dropdown
+    } else {
+        labelSelect.value = currentAnnotationFilter || ""; 
+    }
+    clearFilterButton.disabled = !currentAnnotationFilter;
+
+  } else if (filterContainer) {
+    filterContainer.style.display = 'none'; // Hide filter UI for 'Clips' tab
+  }
+  
+  // Check for overall clips emptiness first
   if (clips.length === 0) {
     const emptyMessage = document.createElement('p');
     emptyMessage.textContent = activeTab === 'clips' 
@@ -1588,88 +1907,147 @@ function updateModalContent() {
     return;
   }
   
-  // Filter clips based on active tab
-  const filteredClips = clips.filter(clip => 
+  // Filter clips based on active tab FIRST
+  let filteredClips = clips.filter(clip => 
     activeTab === 'clips' ? !clip.isSecondary : clip.isSecondary
   );
   
+  // --- Debugging Start ---
+  console.log(`Clips after tab filter (${activeTab}): ${filteredClips.length}`);
+  console.log(`Current label filter: ${currentAnnotationFilter}`);
+  // --- Debugging End ---
+
+  // NEW: Apply label filter if on Annotations tab and filter is active
+  if (activeTab === 'annotations' && currentAnnotationFilter) {
+      filteredClips = filteredClips.filter(clip => clip.label === currentAnnotationFilter);
+      // --- Debugging Start ---
+      console.log(`Clips after label filter (${currentAnnotationFilter}): ${filteredClips.length}`);
+      // --- Debugging End ---
+  }
+  
+  // Check for emptiness AFTER filtering
   if (filteredClips.length === 0) {
-    const emptyMessage = document.createElement('p');
-    emptyMessage.textContent = activeTab === 'clips' 
-      ? 'No clips saved yet. Select text and click "Clip" to save.'
-      : 'No annotations saved yet. Select text and click "Annotate" to save.';
-    applyStyles(emptyMessage, {
-      color: styles.colors.text.normal
-    });
-    modalContent.appendChild(emptyMessage);
+     const emptyMessage = document.createElement('p');
+     emptyMessage.textContent = activeTab === 'clips' 
+       ? 'No clips saved yet.' // Should not happen if clips.length > 0, but good fallback
+       : currentAnnotationFilter 
+         ? `No annotations found with label: "${currentAnnotationFilter}"`
+         : 'No annotations saved yet.'; // Adjusted message
+     applyStyles(emptyMessage, { color: styles.colors.text.normal });
+     modalContent.appendChild(emptyMessage);
     return;
   }
   
   // Sort clips in descending order (newest first)
   const sortedClips = [...filteredClips].reverse();
   
+  // --- Debugging Start ---
+  console.log('Clips to render:', sortedClips.map(c => ({ id: c.id, text: c.text.substring(0, 15), isSecondary: c.isSecondary, label: c.label })));
+  // --- Debugging End ---
+  
+  // Render the filtered clips (existing loop logic)
   sortedClips.forEach(clip => {
-    const clipElement = document.createElement('div');
-    clipElement.className = 'claude-notes-clip';
-    applyStyles(clipElement, createStyleObject(baseStyles.clip, {
-      cursor: 'pointer'  // Add pointer cursor to indicate clickability
-    }));
-    
-    // Add click handler to the clip element
-    clipElement.addEventListener('click', (e) => {
-      // Don't trigger if clicking the delete button
-      if (e.target.closest('button')) return;
-      scrollToClip(clip.id);
-    });
-
-    const clipNumber = document.createElement('div');
-    clipNumber.textContent = clip.id + 1;
-    applyStyles(clipNumber, createStyleObject(baseStyles.clipNumber, {
-      color: clip.isSecondary ? styles.colors.text.normal : styles.colors.primary
-    }));
-    
-    const clipContent = document.createElement('div');
-    applyStyles(clipContent, baseStyles.clipContent);
-    
-    const clipText = document.createElement(clip.isCode ? 'code' : 'p');
-    clipText.textContent = clip.text;
-    
-    // Apply appropriate styles based on clip type
-    if (clip.isCode) {
-      applyStyles(clipText, baseStyles.codeClip);
-    } else {
-      applyStyles(clipText, createStyleObject(
-        baseStyles.clipText,
-        clip.isSecondary ? baseStyles.clipTextSecondary : {}
-      ));
-    }
-    
-    const deleteButton = document.createElement('button');
-    applyStyles(deleteButton, createStyleObject(baseStyles.deleteButton, {
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center'
-    }));
-    deleteButton.appendChild(ClaudeIcons.createIcon('x', 16, styles.colors.text.normal));
-    deleteButton.addEventListener('click', () => {
-      deleteClip(clip.id);
-    });
-    
-    clipContent.appendChild(clipText);
-    clipElement.appendChild(clipNumber);
-    clipElement.appendChild(clipContent);
-    clipElement.appendChild(deleteButton);
-    modalContent.appendChild(clipElement);
+      const clipElement = document.createElement('div');
+      clipElement.className = 'claude-notes-clip';
+      applyStyles(clipElement, createStyleObject(baseStyles.clip, {
+        cursor: 'pointer'  // Add pointer cursor to indicate clickability
+      }));
+      
+      // Add click handler to the clip element
+      clipElement.addEventListener('click', (e) => {
+        // Don't trigger if clicking the delete button
+        if (e.target.closest('button')) return;
+        scrollToClip(clip.id);
+      });
+  
+      const clipNumber = document.createElement('div');
+      clipNumber.textContent = clip.id + 1;
+      applyStyles(clipNumber, createStyleObject(baseStyles.clipNumber, {
+        color: clip.isSecondary ? styles.colors.text.normal : styles.colors.primary
+      }));
+      
+      const clipContent = document.createElement('div');
+      applyStyles(clipContent, baseStyles.clipContent);
+      
+      const clipText = document.createElement(clip.isCode ? 'code' : 'p');
+      clipText.textContent = clip.text;
+      
+      // Apply appropriate styles based on clip type
+      if (clip.isCode) {
+        applyStyles(clipText, baseStyles.codeClip);
+      } else {
+        applyStyles(clipText, createStyleObject(
+          baseStyles.clipText,
+          clip.isSecondary ? baseStyles.clipTextSecondary : {}
+        ));
+      }
+      
+      clipContent.appendChild(clipText); // Add the main text first
+  
+      // Display label if it exists (existing logic)
+      if (clip.label) {
+          const clipLabel = document.createElement('div');
+          // Remove the "Label: " prefix
+          clipLabel.textContent = clip.label; 
+          applyStyles(clipLabel, {
+              fontSize: '0.75rem', // Smaller font size
+              color: styles.colors.text.normal,
+              marginTop: styles.spacing.xs,
+              fontStyle: 'italic'
+          });
+          clipContent.appendChild(clipLabel); // Append label below text
+      }
+  
+      const deleteButton = document.createElement('button');
+      applyStyles(deleteButton, createStyleObject(baseStyles.deleteButton, {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }));
+      deleteButton.appendChild(ClaudeIcons.createIcon('x', 16, styles.colors.text.normal));
+      deleteButton.addEventListener('click', () => {
+        deleteClip(clip.id);
+      });
+      
+      clipElement.appendChild(clipNumber);
+      clipElement.appendChild(clipContent);
+      clipElement.appendChild(deleteButton);
+      modalContent.appendChild(clipElement);
   });
 }
 
 // Clear all clips from current conversation
 function clearAllClips() {
   if (confirm('Are you sure you want to clear all notes from this conversation?')) {
-    // Use deleteClip for each clip to ensure consistent cleanup
-    [...clips].forEach(clip => {
-      deleteClip(clip.id);
+    // 1. Remove all highlights from the current page DOM
+    clearAllHighlights(); // Call the existing function to clear styles
+
+    // 2. Clear clips array for the current conversation
+    clips = [];
+    currentClipId = 0; // Reset ID counter
+
+    // 3. Update the master storage object
+    if (allClips[currentConversationId]) {
+        allClips[currentConversationId].clips = []; // Set to empty array
+        allClips[currentConversationId].lastUpdated = new Date().toISOString();
+    } else {
+        // If conversation wasn't in allClips somehow, initialize it empty
+        // This shouldn't typically happen if clips existed, but good practice
+        allClips[currentConversationId] = {
+          id: currentConversationId,
+          title: conversationTitle, // Use current title
+          lastUpdated: new Date().toISOString(),
+          clips: []
+        };
+    }
+
+    // 4. Save updated storage
+    chrome.storage.local.set({ 'claudeNotesV2': allClips }, () => {
+        console.log('Claude Notes: All clips cleared from conversation', currentConversationId);
     });
+
+    // 5. Update the modal UI
+    updateModalContent();
   }
 }
 
@@ -1778,11 +2156,8 @@ function loadClips() {
     
     // Apply highlights with a slight delay to ensure page has loaded
     if (clips.length > 0) {
-      console.log('Scheduling highlight application after content loads...');
-      // Use a slight delay to let Claude finish rendering its content
-      setTimeout(() => {
-        applyHighlights();
-      }, 1000);
+      console.log('Waiting for Claude content before applying highlights...');
+      waitForClaudeContent();
     }
   });
 }
@@ -1836,25 +2211,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (noteModal) {
       if (noteModal.style.display === 'none') {
         console.log('Showing modal');
+
+        // --- NEW: Explicitly set initial position (v2) ---
+        console.log('Applying initial position: top 100px, right 24px, clear left'); // Updated log
+        noteModal.style.top = '100px';
+        noteModal.style.right = '24px'; // Changed from 50px
+        noteModal.style.left = ''; // Clear any explicit left style
+        // --- END NEW ---
+
         noteModal.style.display = 'flex';
-        
+
         // Force update the content when showing
         updateModalContent();
-        
+
         // Make sure modal stays within bounds
         ensureModalWithinBounds();
-        
-        // Check if highlights need to be reapplied
-        // Count existing highlights to see if they match our clips
-        const existingHighlights = document.querySelectorAll('.claude-notes-highlight').length;
-        if (existingHighlights < clips.length) {
-          console.log(`Highlight mismatch detected: ${existingHighlights} highlights vs ${clips.length} clips`);
-          console.log('Reapplying highlights...');
-          // Apply highlights with a delay to ensure content is loaded
-          setTimeout(() => {
-            applyHighlights();
-          }, 300);
-        }
       } else {
         console.log('Hiding modal');
         noteModal.style.display = 'none';
@@ -1872,33 +2243,82 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 function ensureModalWithinBounds() {
   if (!noteModal) return;
   
+  console.log('--- ensureModalWithinBounds --- START ---'); // Log start
+  console.log('Initial styles:', { top: noteModal.style.top, left: noteModal.style.left, right: noteModal.style.right }); // Log initial styles
+
   const minDistanceFromEdge = 50;
   const windowWidth = window.innerWidth;
   const windowHeight = window.innerHeight;
+  const modalWidth = noteModal.offsetWidth;
+  const modalHeight = noteModal.offsetHeight;
+
+  // Get current position more reliably using getBoundingClientRect
+  const rect = noteModal.getBoundingClientRect();
+  let currentTop = rect.top;
+  let currentLeft = rect.left;
   
-  // Get current position
-  const currentTop = parseInt(noteModal.style.top) || 0;
-  const currentLeft = parseInt(noteModal.style.left) || 0;
-  
+  console.log('Dimensions:', { windowWidth, windowHeight, modalWidth, modalHeight });
+  console.log('Current Rect:', { currentTop, currentLeft });
+
   // Check if modal is too close to any edge
+  let needsRepositioning = false;
+
   // Top constraint
   if (currentTop < minDistanceFromEdge) {
+    console.log('Adjusting TOP: Too close to top');
     noteModal.style.top = `${minDistanceFromEdge}px`;
+    needsRepositioning = true;
   } 
   // Bottom constraint
-  else if (currentTop + noteModal.offsetHeight > windowHeight - minDistanceFromEdge) {
-    noteModal.style.top = `${windowHeight - noteModal.offsetHeight - minDistanceFromEdge}px`;
+  else if (currentTop + modalHeight > windowHeight - minDistanceFromEdge) {
+    console.log('Adjusting TOP: Too close to bottom');
+    const newTop = Math.max(minDistanceFromEdge, windowHeight - modalHeight - minDistanceFromEdge); // Ensure it doesn't go above top edge
+    noteModal.style.top = `${newTop}px`;
+    needsRepositioning = true;
   }
   
-  // Left constraint
-  if (currentLeft < minDistanceFromEdge) {
-    noteModal.style.left = `${minDistanceFromEdge}px`;
-  } 
-  // Right constraint
-  else if (currentLeft + noteModal.offsetWidth > windowWidth - minDistanceFromEdge) {
-    noteModal.style.left = `${windowWidth - noteModal.offsetWidth - minDistanceFromEdge}px`;
-    noteModal.style.right = 'auto';
+  // --- Check RIGHT edge FIRST if right style is set ---
+  if (noteModal.style.right && noteModal.style.right !== 'auto') {
+      const currentRight = windowWidth - currentLeft - modalWidth;
+      console.log('Checking RIGHT edge (currentRight value: ', currentRight, ')');
+      if (currentRight < minDistanceFromEdge) {
+          console.log('Adjusting RIGHT: Too close to right edge');
+          const newRight = minDistanceFromEdge;
+          noteModal.style.right = `${newRight}px`;
+          noteModal.style.left = ''; // Clear left if setting right
+          needsRepositioning = true;
+      }
+      // If right is okay, we might not need to check left unless it's also out of bounds
+      else if (currentLeft < minDistanceFromEdge) {
+          console.log('Adjusting LEFT (even though right was set): Too close to left edge');
+          noteModal.style.left = `${minDistanceFromEdge}px`;
+          noteModal.style.right = ''; // Clear right if setting left
+          needsRepositioning = true;
+      }
+  } else {
+      // --- Original Left/Right check if right style wasn't the priority ---
+      console.log('Checking LEFT/RIGHT edges (right style not set)');
+      // Left constraint
+      if (currentLeft < minDistanceFromEdge) {
+        console.log('Adjusting LEFT: Too close to left edge');
+        noteModal.style.left = `${minDistanceFromEdge}px`;
+        noteModal.style.right = ''; // Clear right if setting left
+        needsRepositioning = true;
+      } 
+      // Right constraint (based on left + width)
+      else if (currentLeft + modalWidth > windowWidth - minDistanceFromEdge) {
+        console.log('Adjusting LEFT: Too close to right edge');
+        const newLeft = Math.max(minDistanceFromEdge, windowWidth - modalWidth - minDistanceFromEdge); // Ensure it doesn't go past left edge
+        noteModal.style.left = `${newLeft}px`;
+        noteModal.style.right = ''; // Clear right if setting left
+        needsRepositioning = true;
+      }
   }
+
+  if (needsRepositioning) {
+      console.log('Final styles applied:', { top: noteModal.style.top, left: noteModal.style.left, right: noteModal.style.right });
+  }
+  console.log('--- ensureModalWithinBounds --- END ---'); // Log end
 }
 
 // Add this new function to handle scrolling to a clip
@@ -1921,4 +2341,282 @@ function scrollToClip(clipId) {
     highlight.style.backgroundColor = '';
     highlight.style.transition = '';
   }, 1500);
+}
+
+function restoreHighlight(clip, container) {
+  // Find the matching element based on context
+  let targetElement = null;
+  const elementContext = clip.elementContext;
+  
+  // Handle headings
+  if (elementContext.isHeading) {
+    const headings = container.querySelectorAll(`h${elementContext.headingLevel}`);
+    for (const heading of headings) {
+      if (heading.textContent.includes(clip.text)) {
+        targetElement = heading;
+        break;
+      }
+    }
+  }
+  // Handle list items
+  else if (elementContext.isList) {
+    const listContext = elementContext.listContext;
+    const listSelector = listContext.isOrdered ? 'ol' : 'ul';
+    const lists = container.querySelectorAll(listSelector);
+    
+    for (const list of lists) {
+      // Check if list properties match
+      if (listContext.isOrdered) {
+        const startMatch = list.getAttribute('start') === listContext.listStart;
+        const reversedMatch = list.hasAttribute('reversed') === listContext.listReversed;
+        if (!startMatch || !reversedMatch) continue;
+      }
+      
+      const items = Array.from(list.children);
+      // Try to find the matching list item
+      for (const item of items) {
+        if (item.textContent.includes(clip.text)) {
+          targetElement = item;
+          break;
+        }
+      }
+      if (targetElement) break;
+    }
+  }
+  // Handle other elements
+  else {
+    // Existing logic for other elements
+    const elements = container.querySelectorAll(`${elementContext.type}.${elementContext.classes.split(' ').join('.')}`);
+    for (const el of elements) {
+      if (el.textContent.includes(clip.text)) {
+        targetElement = el;
+        break;
+      }
+    }
+  }
+
+  if (!targetElement) return false;
+
+  // Create range and highlight
+  const range = document.createRange();
+  const textNode = findTextNode(targetElement, clip.text);
+  if (!textNode) return false;
+
+  range.setStart(textNode, clip.startOffset);
+  range.setEnd(textNode, clip.endOffset);
+  
+  highlightRange(range);
+  return true;
+}
+
+// Helper function to find text node containing the target text
+function findTextNode(element, targetText) {
+  const walker = document.createTreeWalker(
+    element,
+    NodeFilter.SHOW_TEXT,
+    null,
+    false
+  );
+  
+  let node;
+  while (node = walker.nextNode()) {
+    if (node.textContent.includes(targetText)) {
+      return node;
+    }
+  }
+  return null;
+}
+
+// --- Label Storage Functions ---
+async function getLabels() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(['claudeNotesLabels'], (result) => {
+            resolve(result.claudeNotesLabels || []);
+        });
+    });
+}
+
+async function addLabel(newLabel) {
+    return new Promise(async (resolve) => {
+        const existingLabels = await getLabels();
+        if (!existingLabels.includes(newLabel)) {
+            const updatedLabels = [...existingLabels, newLabel].sort(); // Keep sorted
+            chrome.storage.local.set({ 'claudeNotesLabels': updatedLabels }, () => {
+                console.log('Added new label:', newLabel);
+                resolve();
+            });
+        } else {
+            resolve(); // Label already exists
+        }
+    });
+}
+
+// New function
+async function openAnnotationModal(selection, isCodeBlock) {
+    // Store selection info immediately
+    const selectedText = selection.toString().trim();
+    if (!selectedText) return; // Don't open if selection disappeared
+    const range = selection.getRangeAt(0).cloneRange(); // Clone range for later use
+
+    // --- Create Modal Elements ---
+    const annotationModal = document.createElement('div');
+    annotationModal.id = 'claude-notes-annotation-modal';
+    applyStyles(annotationModal, createStyleObject(baseStyles.modal, {
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)', // Center the modal
+        width: '400px',
+        maxHeight: '80vh', // Limit height
+        zIndex: '10002', // Ensure it's above the main modal
+        display: 'flex' // Make sure it's visible
+    }));
+
+    // Header
+    const modalHeader = document.createElement('div');
+    applyStyles(modalHeader, baseStyles.header);
+    const modalTitle = document.createElement('span');
+    modalTitle.textContent = 'Add Label to Annotation';
+    applyStyles(modalTitle, { fontWeight: 'bold' });
+    const closeButton = document.createElement('button');
+    applyStyles(closeButton, baseStyles.button);
+    closeButton.appendChild(ClaudeIcons.createIcon('x', 20, styles.colors.text.normal));
+    closeButton.onclick = () => document.body.removeChild(annotationModal);
+    modalHeader.appendChild(modalTitle);
+    modalHeader.appendChild(closeButton);
+
+    // Content Area
+    const modalContent = document.createElement('div');
+    applyStyles(modalContent, createStyleObject(baseStyles.content, { display: 'flex', flexDirection: 'column', gap: styles.spacing.md }));
+
+    // Preview Section
+    const previewLabel = document.createElement('div');
+    previewLabel.textContent = 'Selected text:';
+    applyStyles(previewLabel, { fontWeight: 'bold' });
+    const preview = document.createElement('div');
+    preview.textContent = selectedText;
+    applyStyles(preview, {
+        padding: styles.spacing.sm,
+        backgroundColor: styles.colors.background.light,
+        borderRadius: '4px',
+        fontSize: '0.875rem',
+        maxHeight: '150px', // Limit preview height
+        overflowY: 'auto'
+    });
+
+    // Labeling Section
+    const labelingSection = document.createElement('div');
+    applyStyles(labelingSection, { display: 'flex', flexDirection: 'column', gap: styles.spacing.sm });
+    
+    const existingLabels = await getLabels(); // Fetch existing labels (async)
+    let labelSelect;
+    
+    if (existingLabels.length > 0) {
+        const selectLabelText = document.createElement('label');
+        selectLabelText.textContent = 'Select existing label:';
+        applyStyles(selectLabelText, { fontSize: '0.9rem', color: styles.colors.text.normal });
+        
+        labelSelect = document.createElement('select');
+        applyStyles(labelSelect, { padding: styles.spacing.sm, border: `1px solid ${styles.colors.border}`, borderRadius: '4px' });
+        
+        // Add a default "Select..." option
+        const defaultOption = document.createElement('option');
+        defaultOption.value = "";
+        defaultOption.textContent = "-- Select existing --";
+        labelSelect.appendChild(defaultOption);
+
+        // Add existing labels
+        existingLabels.forEach(label => {
+            const option = document.createElement('option');
+            option.value = label;
+            option.textContent = label;
+            labelSelect.appendChild(option);
+        });
+        labelingSection.appendChild(selectLabelText);
+        labelingSection.appendChild(labelSelect);
+    }
+
+    const newLabelLabel = document.createElement('label');
+    newLabelLabel.textContent = existingLabels.length > 0 ? 'Or add new label:' : 'Add label:';
+     applyStyles(newLabelLabel, { fontSize: '0.9rem', color: styles.colors.text.normal, marginTop: existingLabels.length > 0 ? styles.spacing.sm : '0' });
+    
+    const labelInput = document.createElement('input');
+    labelInput.type = 'text';
+    labelInput.placeholder = 'Enter new label...';
+    applyStyles(labelInput, { padding: styles.spacing.sm, border: `1px solid ${styles.colors.border}`, borderRadius: '4px' });
+    labelingSection.appendChild(newLabelLabel);
+    labelingSection.appendChild(labelInput);
+
+    // Action Buttons
+    const modalActions = document.createElement('div');
+    applyStyles(modalActions, createStyleObject(baseStyles.actions, { borderTop: 'none', paddingTop: '0' })); // No border needed here
+    
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = 'Cancel';
+    applyStyles(cancelButton, createStyleObject(baseStyles.actionButton, { backgroundColor: styles.colors.text.normal }));
+    cancelButton.onclick = () => document.body.removeChild(annotationModal);
+
+    const saveButton = document.createElement('button');
+    saveButton.textContent = 'Save Annotation';
+    applyStyles(saveButton, createStyleObject(baseStyles.actionButton, { backgroundColor: styles.colors.primary }));
+    saveButton.onclick = async () => {
+        let chosenLabel = "";
+        // Prioritize dropdown selection if it exists and has a value
+        if (labelSelect && labelSelect.value) {
+            chosenLabel = labelSelect.value;
+        } else {
+            chosenLabel = labelInput.value.trim();
+        }
+
+        if (!chosenLabel) {
+            alert("Please select or enter a label.");
+            return;
+        }
+
+        // If it's a new label, add it to the global list
+        if (!existingLabels.includes(chosenLabel)) {
+            await addLabel(chosenLabel); 
+        }
+
+        // --- Save the clip with the label ---
+        const clipRangeInfo = getRangeInfo(range); // Get context for the original range
+        if (!clipRangeInfo) {
+             console.error("Could not get range info for annotation.");
+             alert("Error saving annotation context. Please try again.");
+             document.body.removeChild(annotationModal);
+             return;
+        }
+
+        const clip = createClipObject(
+            range, 
+            selectedText, 
+            isCodeBlock, 
+            true, // Mark as secondary/annotation
+            currentClipId, // Use the current global ID
+            clipRangeInfo.elementContext.isList // Pass isList flag from context
+        );
+        clip.label = chosenLabel; // Add the label property
+
+        clips.push(clip);
+        currentClipId++; // Increment AFTER assigning
+
+        highlightText(range, clip.id, clip.isCode, clip.isSecondary);
+        updateStorageAndUI(); // Save to storage and update main modal
+
+        document.body.removeChild(annotationModal); // Close this modal
+    };
+
+    modalActions.appendChild(cancelButton);
+    modalActions.appendChild(saveButton);
+
+    // --- Assemble Modal ---
+    modalContent.appendChild(previewLabel);
+    modalContent.appendChild(preview);
+    modalContent.appendChild(labelingSection);
+    annotationModal.appendChild(modalHeader);
+    annotationModal.appendChild(modalContent);
+    annotationModal.appendChild(modalActions);
+
+    // Add to document
+    document.body.appendChild(annotationModal);
+    labelInput.focus(); // Focus the input field
 } 
