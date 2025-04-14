@@ -7,7 +7,12 @@ A Chrome extension that allows you to capture, organize, and revisit valuable AI
 - **Quick Clip Functionality**: One-click saving of selected text from Claude.ai conversations
 - **Visual Context Preservation**: Underlines saved clips for easy reference within the conversation
 - **Notes Library**: Dedicated page to view, search, and manage all your saved notes
-- **Export/Import**: Export your notes as JSON for backup or sharing
+- **Export/Import**: Download your conversation notes as Markdown for backup or sharing
+
+## Cool Details
+- When active the modal will automatically load on any conversation, allowing you to refer back and add quickly
+- If you close the modal, reopen it with the Notes button next to Share in conversation header
+
 
 ## Installation
 
