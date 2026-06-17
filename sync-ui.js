@@ -32,6 +32,9 @@
       .sync-note { margin-top: 16px; font-size: 0.72rem; color: #888; line-height: 1.4;
         border-top: 1px solid #eee; padding-top: 12px; }
       .sync-meta { font-size: 0.75rem; color: #777; margin-top: 6px; }
+      .sync-remember { display: flex; align-items: center; gap: 6px; margin-top: 8px;
+        font-size: 0.8rem; color: #444; cursor: pointer; }
+      .sync-remember input { margin: 0; }
     `;
     document.head.appendChild(style);
   }
@@ -55,6 +58,7 @@
         <p class="sync-sub">End-to-end encrypted sync to your Google Drive.</p>
         <label for="sync-pass">Encryption passphrase</label>
         <input type="password" id="sync-pass" placeholder="Your secret passphrase" autocomplete="off" />
+        <label class="sync-remember"><input type="checkbox" id="sync-remember" /> Remember until I close the browser</label>
         <div class="sync-meta">Last synced: ${lastSynced}</div>
         <div class="sync-row">
           <button class="sync-primary" id="sync-go">Sync now</button>
@@ -67,14 +71,27 @@
           passphrase before anything is uploaded. Google cannot read them, and
           neither can we. <strong>If you forget the passphrase, your synced
           notes cannot be recovered.</strong> Use the same passphrase on every
-          device.
+          device. "Remember" keeps it in memory for this browser session only
+          (never written to disk) and clears when you close the browser.
         </p>
       </div>`;
 
     document.body.appendChild(overlay);
     const statusEl = overlay.querySelector('#sync-status');
     const passEl = overlay.querySelector('#sync-pass');
+    const rememberEl = overlay.querySelector('#sync-remember');
     passEl.focus();
+
+    // Pre-fill if the passphrase was remembered earlier this browser session.
+    // chrome.storage.session lives in memory only and is wiped when the browser
+    // closes, so the passphrase is never written to disk.
+    chrome.storage.session.get(['notesSyncPass'], (r) => {
+      if (r && r.notesSyncPass) {
+        passEl.value = r.notesSyncPass;
+        rememberEl.checked = true;
+        setStatus(statusEl, 'Passphrase remembered for this browser session.');
+      }
+    });
 
     const close = () => overlay.remove();
     overlay.querySelector('#sync-close').addEventListener('click', close);
@@ -89,6 +106,11 @@
       NotesSync.setPassphrase(pass);
       try {
         await NotesSync.syncNow((s) => setStatus(statusEl, s));
+        if (rememberEl.checked) {
+          chrome.storage.session.set({ notesSyncPass: pass });
+        } else {
+          chrome.storage.session.remove('notesSyncPass');
+        }
         setStatus(statusEl, 'Sync complete. Refreshing…', 'ok');
         setTimeout(() => location.reload(), 800);
       } catch (e) {
@@ -106,6 +128,7 @@
 
     overlay.querySelector('#sync-disconnect').addEventListener('click', async () => {
       setStatus(statusEl, 'Disconnecting…');
+      chrome.storage.session.remove('notesSyncPass');
       await DriveSync.disconnect();
       const m = await NotesSync.getMeta();
       m.connected = false;

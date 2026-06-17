@@ -50,9 +50,11 @@ your passphrase.
 - **Storage location**: a single encrypted file in Drive's hidden, app-private
   `appDataFolder` — invisible in your normal Drive and inaccessible to other
   apps. See `drive-sync.js`.
-- **Passphrase**: held only in memory for the current page; never written to
-  disk or sent anywhere. **If you forget it, synced notes are unrecoverable.**
-  Use the same passphrase on every device.
+- **Passphrase**: never written to disk or sent anywhere. **If you forget it,
+  synced notes are unrecoverable.** Use the same passphrase on every device.
+  The optional "Remember until I close the browser" checkbox keeps it in
+  `chrome.storage.session` (in-memory only, cleared when the browser closes) so
+  you don't retype it every sync.
 - **Merge**: syncing is non-destructive — it unions local and remote notes so a
   sync never loses data. (Trade-off: deletions don't propagate across devices;
   use "Clear all" on each device to remove notes everywhere.)
