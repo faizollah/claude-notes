@@ -6,7 +6,7 @@
   "permissions": ["storage", "activeTab", "scripting", "notifications", "identity"],
   "host_permissions": ["https://claude.ai/*", "https://www.googleapis.com/*"],
   "oauth2": {
-    "client_id": "YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com",
+    "client_id": "238716688165-cc2v79nuh4n6mgc6q6aq4p6b8d815qsh.apps.googleusercontent.com",
     "scopes": ["https://www.googleapis.com/auth/drive.appdata"]
   },
   "background": {
