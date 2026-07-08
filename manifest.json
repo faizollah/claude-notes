@@ -3,6 +3,7 @@
   "name": "Claude Notes",
   "version": "1.0.0",
   "description": "Capture, organize, and revisit valuable AI text responses from Claude.ai",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyG0flaBiIcEMtJJrRxqs871KXLgrIvgX1BOhPBUzyMYbPmrij3ahQiXdrr0DrnQUnPp/Aew5saN1jDj3HPhoj4zzomMc/rfmyDYwJXfukmYKw0nPtDJoOi9hBDpxFkjPsyz8AdeZma6FSdjXTc7RQ6LXd/ydwRxjrSb6u1zUVgVlS+iQF/meGP05bf3M5s2/4olawUmE3df1vYYdoBKXjbdgNm0nyX19zJn2mwSbnreLt3vGFTwSGaWDLY1o5FRt4ESodntL/2lGyV94nDXL+JW4J5X4/LIn5AlmipFO44ubfW1FyxS+OKRjdUbtnalWh0t5+giVqWrsYVX3TzaDrwIDAQAB",
   "permissions": ["storage", "activeTab", "scripting", "notifications", "identity"],
   "host_permissions": ["https://claude.ai/*", "https://www.googleapis.com/*"],
   "oauth2": {

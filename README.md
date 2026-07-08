@@ -61,20 +61,21 @@ your passphrase.
 
 ### Sync setup (one-time)
 
-Google requires each extension to register its own OAuth client:
+The manifest pins a fixed extension ID via the `key` field, so the extension
+has the **same ID on every machine**: `fjbjjbmbemmlbgcpfngojbdhmedniaok`. This
+is what lets one OAuth client work across all your devices.
 
-1. Load the unpacked extension and copy its ID from `chrome://extensions/`.
-2. In the [Google Cloud Console](https://console.cloud.google.com/), create a
+1. In the [Google Cloud Console](https://console.cloud.google.com/), create a
    project and enable the **Google Drive API**.
-3. Configure the OAuth consent screen and add yourself as a test user.
-4. Create an **OAuth client ID** of type **Chrome Extension**, using the
-   extension ID from step 1.
-5. Put the generated client ID into `manifest.json` under
-   `oauth2.client_id` (replacing the `YOUR_GOOGLE_OAUTH_CLIENT_ID…`
-   placeholder), then reload the extension.
+2. Configure the OAuth consent screen and add yourself as a test user.
+3. Create an **OAuth client ID** of type **Chrome Extension**, using the fixed
+   extension ID above as the **Item ID**.
+4. Put the generated client ID into `manifest.json` under `oauth2.client_id`,
+   then reload the extension. (This repo already ships a working client ID.)
 
 Then open the Notes Library, click **Sync**, enter your passphrase, and
-**Sync now**.
+**Sync now**. The same extension folder can be loaded on any machine and will
+share the same ID, so sync works everywhere without reconfiguring.
 
 > Note: end-to-end encryption protects your notes against a breach of Google's
 > servers or the network. It does not protect against malware on your own
